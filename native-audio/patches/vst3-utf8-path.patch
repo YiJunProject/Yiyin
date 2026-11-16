@@ -1,0 +1,31 @@
+diff --git a/source/vst/hosting/module_win32.cpp b/source/vst/hosting/module_win32.cpp
+index 7616bd8..1d2f7a6 100644
+--- a/source/vst/hosting/module_win32.cpp
++++ b/source/vst/hosting/module_win32.cpp
+@@ -155,7 +155,7 @@ public:
+ 	{
+ 		namespace StringConvert = Steinberg::Vst::StringConvert;
+ 
+-		filesystem::path p (inPath);
++		filesystem::path p = filesystem::u8path (inPath); // Yideck: incoming module paths are UTF-8 on Windows.
+ 
+ 		auto filename = p.filename ();
+ 		p /= "Contents";
+@@ -170,7 +170,7 @@ public:
+ 			instance = loadAsPackage (inPath, errorDescription, architectureX64String);
+ #endif // SMTG_CPU_ARM_64EC
+ 		if (instance == nullptr)
+-			getLastError (p.string (), errorDescription);
++			getLastError (p.generic_u8string (), errorDescription);
+ 		return instance;
+ 	}
+ 
+@@ -197,7 +197,7 @@ public:
+ 	{
+ 		// filesystem::u8path is deprecated in C++20
+ #if SMTG_CPP20
+-		const filesystem::path tmp (inPath);
++		const filesystem::path tmp = filesystem::u8path (inPath); // Yideck: C++20 narrow paths use ACP, not UTF-8.
+ #else
+ 		const filesystem::path tmp = filesystem::u8path (inPath);
+ #endif // SMTG_CPP20

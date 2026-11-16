@@ -1,0 +1,161 @@
+{
+  "schema": 1,
+  "product": "Yideck.Audio",
+  "version": "1.0.1",
+  "asBuiltAsio": true,
+  "dependencies": [
+    {
+      "archiveSha256": "9507c9dfdc68a00c0f130d48bc134fbc8b319487f79fa7ce02605e9953be8a1e",
+      "changes": [
+        "Expose WASAPI stable endpoint and Windows physical device container identity",
+        "Expose Windows audio adapter friendly name and optional manufacturer without name parsing",
+        "Expose per-callback output queue frames",
+        "Remove pre-initialize invalid stream-latency writes",
+        "Bypass MFT allocation when input/output sample rate match"
+      ],
+      "commit": "06f97b633c06ea747d6478f0e87b6e1178104511",
+      "compiledBackends": [
+        "WASAPI"
+      ],
+      "source": "https://github.com/thestk/rtaudio",
+      "name": "RtAudio",
+      "excluded": "RtAudio ASIO implementation is not compiled; pinned ASIO SDK headers are used by the separately licensed Yideck adapter",
+      "license": "MIT-style",
+      "patchedSourceSha256": {
+        "RtAudio.h": "691e00d8ab59ebe67c81346d171563911ba9ecc2703f194fbbfbb559ac4142a9",
+        "RtAudio.cpp": "75bcd4dca40b2436eec28f0d673fc397bb3ddcdb8ce64a21953c309af224d56f"
+      }
+    },
+    {
+      "submodules": [
+        " fcf9da0bd27a16f7f03773a3a39822f28f5c8477 base (v3.8.1_build_84)",
+        " 054c9143cbb8d47fc4694e473f2ee3b4d951a8f5 cmake (v3.8.1_build_84)",
+        " 8bfca19d3b76a61d093951ba9297047f544caea1 doc (v3.8.1_build_84)",
+        " 4f547e8e102b47de4a8b8aaf343c73b700786372 pluginterfaces (v3.8.1_build_84)",
+        " 586dc5e6c8012c3e4b01c79389375cbe96bdb1da public.sdk (v3.8.1_build_84)",
+        " 33b73dfbb87f3fde3bce8c0a10cae934dc66ad34 tutorials (heads/main)",
+        " 5db272256172557818b6158cf0bb2c4410bddb25 vstgui4 (5db2722)"
+      ],
+      "changes": [
+        "Parse Windows VST3 bundle UTF-8 paths with filesystem::u8path, preserving Chinese project locations"
+      ],
+      "name": "Steinberg VST3 SDK",
+      "compilerCompatibility": "/Zc:char8_t-",
+      "license": "MIT",
+      "commit": "3cdf9ca5d1f5b1b21e0a86832aa4abe55607bd96",
+      "source": "https://github.com/steinbergmedia/vst3sdk",
+      "patchedSourceSha256": {
+        "public.sdk/source/vst/hosting/module_win32.cpp": "492792abc47ea971ecf73dac3ddcd98f0875ed9989de31cb539843469d9ae127"
+      }
+    },
+    {
+      "note": "Independent ABI definitions, not the legacy Steinberg SDK; copyright permission is not a third-party patent/trademark grant",
+      "changes": [],
+      "name": "Xaymar VST2 independent interface",
+      "archiveSha256": "45ff98a686bf34119a5e446f9a4c5e4552ee9059d0395cc2d99e15b78d83cc88",
+      "license": "BSD-3-Clause",
+      "commit": "339d4f31590bf77c0d0d248e09a380ac6285e069",
+      "source": "https://github.com/Xaymar/vst2sdk"
+    },
+    {
+      "sha256": "d2eeb25d2e95bffeb08ebb7704cdffd2e8fca7113eba9a0b38d60a5c391ea09a",
+      "origin": "Reused project native-video pinned single header",
+      "source": "https://github.com/nlohmann/json",
+      "license": "MIT",
+      "name": "nlohmann/json"
+    },
+    {
+      "name": "Steinberg ASIO SDK interface",
+      "version": "2.3",
+      "source": "https://github.com/thestk/rtaudio/tree/06f97b633c06ea747d6478f0e87b6e1178104511/include",
+      "officialLicensing": "https://www.steinberg.net/developers/",
+      "license": "Steinberg proprietary ASIO agreement",
+      "authorization": {
+        "basis": "Product owner confirmed countersigned agreement permits distribution in Yideck",
+        "confirmedDate": "2026-10-17",
+        "privateAgreementIncluded": false
+      },
+      "changes": [],
+      "interfaceSha256": {
+        "asio.h": "5f965d98bc6592861720ca59bd0090579c402632ecaeb4bb245d1aab2e819ce4",
+        "asiosys.h": "00f406f6733b1f1c144c140e9915f3ceaea76598adb7c2b1f2378c343ab00228",
+        "iasiodrv.h": "861f110bc7cf0756ee10e0ea4d57e2964f8d8359cd6c9483d8b47785bcc9e79c"
+      },
+      "adapter": "Yideck Windows x64 single-driver IASIO; no RtAudio ASIO auto-probe"
+    }
+  ],
+  "build": {
+    "architecture": "Windows x64",
+    "configuration": "Release",
+    "msvcRuntime": "static /MT",
+    "vst3StaticCrt": true,
+    "productVersion": "1.0.1.0",
+    "additionalRedistributableDlls": [],
+    "systemDependencies": [
+      "CRYPT32.dll",
+      "USER32.dll",
+      "ole32.dll",
+      "MFPlat.dll (engine)",
+      "KERNEL32.dll",
+      "ADVAPI32.dll (engine)"
+    ],
+    "enabledBackends": [
+      "WASAPI",
+      "ASIO"
+    ],
+    "runtimeDirectory": "native-audio/bin-v13100"
+  },
+  "patches": {
+    "rtaudio-wasapi.patch": "9c1ba74c6e8633f78b2a7c5b1df22b1ff1a4ffb0c37c57b83c2fed046aa38b21",
+    "vst3-utf8-path.patch": "fee9b17e48f423fad5e11c96c0e05a24d68d6f2a69e62b43c33a41c5644646f7"
+  },
+  "binaries": {
+    "Yideck.Audio.Engine.exe": "27bfbed0d7747a55c7e8d36f06ec1d0d317e284312d04f9856eeafe307ef35b6",
+    "Yideck.Audio.Scan.exe": "c48f4d76f9ff4f5cbc41fa18afbd3f72de4a96313439115759996e5e23bbce22"
+  },
+  "hostChanges": [
+    "Observe final float32 hardware-channel mix peak/above-full-scale/nonfinite counts without modifying signal",
+    "Expose actual prepared ASIO output buffer sample formats and integer above-full-scale conversion count",
+    "Apply insert wet/bypass and send pre/post controls at block boundaries through the existing preallocated queue",
+    "Retain float32 graph/plugin transport; no automatic limiter or additional internal amplitude clamp",
+    "Read back all VST3 audio buses after negotiation, retry plugin-proposed auxiliary layouts, then request auxiliary-to-main shape only when needed; preserve exact mono/stereo main layout and disabled zero-filled auxiliary inputs",
+    "Prepare/commit/rollback graph transactions keep the original graph processing until persistence succeeds; retain unchanged plugin instances and eligible delay/gain history",
+    "Read current VST2 chunk on native UI thread without callback gating or dry substitution; reject observed callback nonprogress/overrun and invalid state",
+    "Dedicated native plugin content viewport scrolls fixed-size editors; resizable VST3 constraints and IPlugViewContentScaleSupport DPI notifications",
+    "While stopped, permit plugin graph preparation when selected endpoint channels are stale; publish explicit hardware readiness/issue, keep running edits and hardware start validation strict",
+    "Marshal VST3 background analyzer requests to the owning UI idle thread; preserve direct UI notifications and discard queued messages on disconnect without changing DSP or plugin parameters"
+  ],
+  "sourceEvidence": {
+    "providerFix": "initial UI message proxies; no disconnect/reconnect",
+    "regression": "evidence/v1.0.1/fixture-before.json and fixture-after.json",
+    "messages": "evidence/v1.0.1/ui-message-regression.json",
+    "commercial": "evidence/v1.0.1/vst3-fixed.json"
+  },
+  "previousSourceEvidence": {
+    "nativeRegression": "evidence/v1391-plugin-analyzer1/ui-message-checks.json",
+    "editorLifecycleRegression": "evidence/v1391-plugin-analyzer1/graph-edits.json",
+    "nativeReportedVersion": "1.3.10",
+    "actualCommercialPluginImages": [
+      "evidence/v1391-plugin-analyzer1/pro-c-product1/signal.bmp",
+      "evidence/v1391-plugin-analyzer1/pro-q-product1/signal.bmp"
+    ],
+    "priorLock": "native-audio/dependencies.v1240.lock.json",
+    "sources": {
+      "native-audio/src/plugins.cpp": "e94ae08b3ab988f9da241b1d0fa7322547a83fe7f65bc3e965e33ef2c598b23b",
+      "native-audio/src/vst3_ui_connection.h": "8f5a61b645c1c1121dff267d27f198830bf8e0d23a6f43e0e50cf86611da1b8e",
+      "native-audio/src/engine.cpp": "6ac969f23c251a1cb9f16bd69fa2bbe3ffc0a874c5b958d2179234f9933f9cee",
+      "native-audio/CMakeLists.txt": "d29ea09b62ac2a22af64184793c469404ed375498a24f850273a3d56a824b650",
+      "native-audio/tests/test_plugin_analyzer.h": "0210e5440f05a3ceb3a00bd7499a93fc4a9ecf4d8db4aba50fbee8d89823279c",
+      "native-audio/tests/test_vst3_ui_connection.h": "f50b56f379524d4e686027a7411c5581de609271c189b40a8b0a34532be6d283",
+      "native-audio/tests/test_graph_edits.cpp": "c661c62e5b581dfa990b2a20daadc99ea98f9ef99e43ca99930def87b218cc39"
+    },
+    "boundary": "Actual installed Pro-C2/Pro-Q3 plugin UI and synthetic signal in isolated source-linked host, with no hardware audio, MIDI or production settings changes. Final Engine ping confirms ASIO and version; no final installed App acceptance claimed.",
+    "revision": "v1.3.10 VST3 analyzer UI message forwarding"
+  },
+  "standalonePatch": {
+    "sdkOrigin": "Steinberg VST3 SDK pinned public.sdk/source/vst/hosting/plugprovider.cpp",
+    "adapted": "native-audio/src/vst3_plugprovider.cpp",
+    "sha256": "8A9B2782C2A7A23732B084DB4C063B44F3A2CD305CC08A052A17D35E1EDF761B",
+    "connectionSha256": "8B80DA8CF9076C619DA6CF7E37D3B454AD4039E3114A1F942F0BB244E61FA6D4"
+  }
+}

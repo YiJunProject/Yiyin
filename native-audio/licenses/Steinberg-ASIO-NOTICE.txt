@@ -1,0 +1,24 @@
+Steinberg ASIO SDK attribution and licensing notice
+
+ASIO is a trademark and software of Steinberg Media Technologies GmbH.
+ASIO SDK interface version 2.3, copyright (c) 1997-2013 Steinberg Media
+Technologies GmbH. The SDK is used under the applicable proprietary ASIO
+agreement, not under the RtAudio MIT-style license or VST3 MIT license.
+
+The product owner explicitly confirmed on 2026-11-16 that a countersigned
+ASIO agreement authorizes use and redistribution in 易音·Yiyin. This notice
+does not reproduce that private agreement and is not a grant to third parties.
+Builders/distributors must have their own applicable permission.
+
+Pinned source: the ASIO SDK headers supplied in RtAudio commit
+06f97b633c06ea747d6478f0e87b6e1178104511, include/asio.h, include/asiosys.h,
+and include/iasiodrv.h. Exact source hashes are in dependencies.lock.json.
+No changes were made to these SDK headers. Yideck's own single-driver adapter
+uses the Windows x64 IASIO interface. It does not use RtAudio's ASIO backend.
+
+Source: https://github.com/thestk/rtaudio/tree/06f97b633c06ea747d6478f0e87b6e1178104511/include
+Official SDK and licensing: https://www.steinberg.net/developers/
+
+MiniFuse and other third-party ASIO drivers are separately installed software
+and are not redistributed in this product. Driver compatibility must be tested
+separately; listing a registered driver is not a compatibility certification.

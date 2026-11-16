@@ -1,0 +1,112 @@
+{
+  "schema": 1,
+  "product": "Yiyin.Audio",
+  "version": "1.1.0",
+  "asBuiltAsio": true,
+  "dependencies": [
+    {
+      "archiveSha256": "9507c9dfdc68a00c0f130d48bc134fbc8b319487f79fa7ce02605e9953be8a1e",
+      "changes": [
+        "Expose WASAPI stable endpoint and Windows physical device container identity",
+        "Expose Windows audio adapter friendly name and optional manufacturer without name parsing",
+        "Expose per-callback output queue frames",
+        "Remove pre-initialize invalid stream-latency writes",
+        "Bypass MFT allocation when input/output sample rate match"
+      ],
+      "commit": "06f97b633c06ea747d6478f0e87b6e1178104511",
+      "compiledBackends": [
+        "WASAPI"
+      ],
+      "source": "https://github.com/thestk/rtaudio",
+      "name": "RtAudio",
+      "excluded": "RtAudio ASIO implementation is not compiled; pinned ASIO SDK headers are used by the separately licensed Yideck adapter",
+      "license": "MIT-style",
+      "patchedSourceSha256": {
+        "RtAudio.h": "691e00d8ab59ebe67c81346d171563911ba9ecc2703f194fbbfbb559ac4142a9",
+        "RtAudio.cpp": "75bcd4dca40b2436eec28f0d673fc397bb3ddcdb8ce64a21953c309af224d56f"
+      }
+    },
+    {
+      "submodules": [
+        " fcf9da0bd27a16f7f03773a3a39822f28f5c8477 base (v3.8.1_build_84)",
+        " 054c9143cbb8d47fc4694e473f2ee3b4d951a8f5 cmake (v3.8.1_build_84)",
+        " 8bfca19d3b76a61d093951ba9297047f544caea1 doc (v3.8.1_build_84)",
+        " 4f547e8e102b47de4a8b8aaf343c73b700786372 pluginterfaces (v3.8.1_build_84)",
+        " 586dc5e6c8012c3e4b01c79389375cbe96bdb1da public.sdk (v3.8.1_build_84)",
+        " 33b73dfbb87f3fde3bce8c0a10cae934dc66ad34 tutorials (heads/main)",
+        " 5db272256172557818b6158cf0bb2c4410bddb25 vstgui4 (5db2722)"
+      ],
+      "changes": [
+        "Parse Windows VST3 bundle UTF-8 paths with filesystem::u8path, preserving Chinese project locations"
+      ],
+      "name": "Steinberg VST3 SDK",
+      "compilerCompatibility": "/Zc:char8_t-",
+      "license": "MIT",
+      "commit": "3cdf9ca5d1f5b1b21e0a86832aa4abe55607bd96",
+      "source": "https://github.com/steinbergmedia/vst3sdk",
+      "patchedSourceSha256": {
+        "public.sdk/source/vst/hosting/module_win32.cpp": "492792abc47ea971ecf73dac3ddcd98f0875ed9989de31cb539843469d9ae127"
+      }
+    },
+    {
+      "note": "Independent ABI definitions, not the legacy Steinberg SDK; copyright permission is not a third-party patent/trademark grant",
+      "changes": [],
+      "name": "Xaymar VST2 independent interface",
+      "archiveSha256": "45ff98a686bf34119a5e446f9a4c5e4552ee9059d0395cc2d99e15b78d83cc88",
+      "license": "BSD-3-Clause",
+      "commit": "339d4f31590bf77c0d0d248e09a380ac6285e069",
+      "source": "https://github.com/Xaymar/vst2sdk"
+    },
+    {
+      "sha256": "d2eeb25d2e95bffeb08ebb7704cdffd2e8fca7113eba9a0b38d60a5c391ea09a",
+      "origin": "Reused project native-video pinned single header",
+      "source": "https://github.com/nlohmann/json",
+      "license": "MIT",
+      "name": "nlohmann/json"
+    },
+    {
+      "name": "Steinberg ASIO SDK interface",
+      "version": "2.3",
+      "source": "https://github.com/thestk/rtaudio/tree/06f97b633c06ea747d6478f0e87b6e1178104511/include",
+      "officialLicensing": "https://www.steinberg.net/developers/",
+      "license": "Steinberg proprietary ASIO agreement",
+      "authorization": {
+        "basis": "Builder is responsible for its applicable ASIO agreement. Official Yiyin release authorization confirmed by product owner on 2026-11-16.",
+        "privateAgreementIncluded": false
+      },
+      "changes": [],
+      "interfaceSha256": {
+        "asio.h": "5f965d98bc6592861720ca59bd0090579c402632ecaeb4bb245d1aab2e819ce4",
+        "asiosys.h": "00f406f6733b1f1c144c140e9915f3ceaea76598adb7c2b1f2378c343ab00228",
+        "iasiodrv.h": "861f110bc7cf0756ee10e0ea4d57e2964f8d8359cd6c9483d8b47785bcc9e79c"
+      },
+      "adapter": "Yideck Windows x64 single-driver IASIO; no RtAudio ASIO auto-probe"
+    }
+  ],
+  "build": {
+    "architecture": "Windows x64",
+    "configuration": "Release",
+    "msvcRuntime": "static /MT",
+    "vst3StaticCrt": true,
+    "enabledBackends": [
+      "WASAPI",
+      "ASIO"
+    ],
+    "productVersion": "1.1.0.0",
+    "runtimeDirectory": "native-audio/bin-v1.1.0"
+  },
+  "patches": {
+    "rtaudio-wasapi.patch": "9c1ba74c6e8633f78b2a7c5b1df22b1ff1a4ffb0c37c57b83c2fed046aa38b21",
+    "vst3-utf8-path.patch": "fee9b17e48f423fad5e11c96c0e05a24d68d6f2a69e62b43c33a41c5644646f7"
+  },
+  "binaries": {
+    "Yideck.Audio.Engine.exe": "75d6b74bec5b104ba69093c4dc260a74402feaf78fe9ef0a86e249caa775fed3",
+    "Yideck.Audio.Scan.exe": "036fa4ae9b600529f6f64980bb48f11ac9c3e2463d0f4f75396885c967d38d99"
+  },
+  "standalonePatch": {
+    "sdkOrigin": "Steinberg VST3 SDK pinned public.sdk/source/vst/hosting/plugprovider.cpp",
+    "adapted": "native-audio/src/vst3_plugprovider.cpp",
+    "sha256": "8A9B2782C2A7A23732B084DB4C063B44F3A2CD305CC08A052A17D35E1EDF761B",
+    "connectionSha256": "8B80DA8CF9076C619DA6CF7E37D3B454AD4039E3114A1F942F0BB244E61FA6D4"
+  }
+}

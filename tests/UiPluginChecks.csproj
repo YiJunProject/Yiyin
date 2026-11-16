@@ -1,0 +1,5 @@
+<Project Sdk="Microsoft.NET.Sdk">
+ <PropertyGroup><OutputType>Exe</OutputType><TargetFramework>net10.0-windows</TargetFramework><UseWPF>true</UseWPF><ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable><EnableDefaultCompileItems>false</EnableDefaultCompileItems></PropertyGroup>
+ <ItemGroup><Compile Include="V110HostChecks.cs"/><Compile Include="UiPluginChecks.cs"/><Reference Include="Yiyin"><HintPath>$(ProductRoot)/Yiyin.dll</HintPath></Reference><Reference Include="Yiyin.Core"><HintPath>$(ProductRoot)/Yiyin.Core.dll</HintPath></Reference><FrameworkReference Include="Microsoft.AspNetCore.App"/></ItemGroup>
+ <ItemGroup><Content Include="$(ProductRoot)/audio-native/**/*" Link="audio-native/%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest"/></ItemGroup>
+</Project>

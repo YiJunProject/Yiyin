@@ -1,0 +1,169 @@
+--- a/RtAudio.h
++++ b/RtAudio.h
+@@ -81,6 +81,7 @@
+ 
+ #include <string>
+ #include <vector>
++#include <atomic>
+ #include <iostream>
+ #include <functional>
+ #include <memory>
+@@ -292,6 +293,10 @@
+   struct DeviceInfo {
+     unsigned int ID{};              /*!< Device ID used to specify a device to RtAudio. */
+     std::string name;               /*!< Character string device name. */
++    std::string stableId;           /*!< Yideck patch: WASAPI endpoint ID; never a default-device alias. */
++    std::string groupId;            /*!< Yideck patch: Windows device container GUID, empty if unavailable. */
++    std::string groupName;          /*!< Yideck patch: Windows audio adapter friendly name; display only. */
++    std::string manufacturer;       /*!< Yideck patch: optional Windows manufacturer property. */
+     unsigned int outputChannels{};  /*!< Maximum output channels supported by device. */
+     unsigned int inputChannels{};   /*!< Maximum input channels supported by device. */
+     unsigned int duplexChannels{};  /*!< Maximum simultaneous input/output channels supported by device. */
+@@ -625,6 +630,7 @@
+     latency, the return value will be zero.
+   */
+   long getStreamLatency( void );
++  unsigned int getOutputQueueFrames( void ); // Yideck: measured WASAPI pending frames.
+ 
+   //! Returns actual sample rate in use by the (open) stream.
+   /*!
+@@ -790,6 +796,7 @@
+   virtual RtAudioErrorType stopStream( void ) = 0;
+   virtual RtAudioErrorType abortStream( void ) = 0;
+   const std::string &getErrorText(void) const { return errorText_; }
++  unsigned int getOutputQueueFrames(void) const { return outputQueueFrames_.load(std::memory_order_relaxed); }
+   long getStreamLatency( void );
+   unsigned int getStreamSampleRate( void );
+   virtual double getStreamTime( void ) const { return stream_.streamTime; }
+@@ -798,6 +805,7 @@
+   bool isStreamRunning( void ) const { return stream_.state == STREAM_RUNNING; }
+   void setErrorCallback( RtAudioErrorCallback errorCallback ) { errorCallback_ = errorCallback; }
+   void showWarnings( bool value ) { showWarnings_ = value; }
++  std::atomic<unsigned int> outputQueueFrames_{0}; // Updated on WASAPI thread before user callback.
+ 
+ 
+ protected:
+@@ -946,6 +954,7 @@
+ inline bool RtAudio :: isStreamOpen( void ) const { return rtapi_->isStreamOpen(); }
+ inline bool RtAudio :: isStreamRunning( void ) const { return rtapi_->isStreamRunning(); }
+ inline long RtAudio :: getStreamLatency( void ) { return rtapi_->getStreamLatency(); }
++inline unsigned int RtAudio :: getOutputQueueFrames( void ) { return rtapi_->getOutputQueueFrames(); }
+ inline unsigned int RtAudio :: getStreamSampleRate( void ) { return rtapi_->getStreamSampleRate(); }
+ inline double RtAudio :: getStreamTime( void ) { return rtapi_->getStreamTime(); }
+ inline void RtAudio :: setStreamTime( double time ) { return rtapi_->setStreamTime( time ); }
+--- a/RtAudio.cpp
++++ b/RtAudio.cpp
+@@ -4459,6 +4459,7 @@
+ class WasapiBuffer
+ {
+ public:
++  unsigned int availableSamples() const { return bufferSize_ ? (inIndex_ + bufferSize_ - outIndex_) % bufferSize_ : 0; }
+   WasapiBuffer()
+     : buffer_( NULL ),
+       bufferSize_( 0 ),
+@@ -4696,6 +4697,12 @@
+ 
+   void Convert( char* outBuffer, const char* inBuffer, unsigned int inSampleCount, unsigned int& outSampleCount, int maxOutSampleCount = -1 )
+   {
++    // Yideck pins both endpoint and graph to 48kHz: bypass allocating MFT sample objects.
++    if (_sampleRatio == 1.0f) {
++      outSampleCount = maxOutSampleCount < 0 ? inSampleCount : std::min(inSampleCount, (unsigned int)maxOutSampleCount);
++      memcpy(outBuffer, inBuffer, (size_t)outSampleCount * _bytesPerSample * _channelCount);
++      return;
++    }
+     unsigned int inputBufferSize = _bytesPerSample * _channelCount * inSampleCount;
+     if ( _sampleRatio == 1 )
+     {
+@@ -5081,6 +5088,7 @@
+       if ( probeDeviceInfo( info, (LPWSTR) temp.c_str(), ids[n].second ) == false ) continue; // ignore if probe fails
+       deviceIds_.push_back( ids[n] );
+       info.ID = currentDeviceId_++;  // arbitrary internal device ID
++      info.stableId = ids[n].first; // Yideck: preserve actual WASAPI endpoint identity.
+       deviceList_.push_back( info );
+     }
+   }
+@@ -5165,6 +5173,38 @@
+ 
+   info.name = convertCharPointerToStdString( deviceNameProp.pwszVal );
+ 
++  // Read the adapter label directly; endpoint names can be user-renamed and
++  // must not be parsed to invent a physical device identity or manufacturer.
++  {
++    auto readText = [&](REFPROPERTYKEY key) {
++      PROPVARIANT value;
++      PropVariantInit(&value);
++      std::string text;
++      if (SUCCEEDED(devicePropStore->GetValue(key, &value)) &&
++          value.vt == VT_LPWSTR && value.pwszVal)
++        text = convertCharPointerToStdString(value.pwszVal);
++      PropVariantClear(&value);
++      return text;
++    };
++    info.groupName = readText(PKEY_DeviceInterface_FriendlyName);
++    info.manufacturer = readText(PKEY_Device_Manufacturer);
++  }
++
++  // Device names cannot establish clock ownership. The Windows container is
++  // shared by input/output endpoints belonging to the same physical device.
++  {
++    PROPVARIANT container;
++    PropVariantInit(&container);
++    info.groupId.clear();
++    if (SUCCEEDED(devicePropStore->GetValue(PKEY_Device_ContainerId, &container)) &&
++        container.vt == VT_CLSID && container.puuid && !IsEqualGUID(*container.puuid, GUID_NULL)) {
++      wchar_t text[40]{};
++      if (StringFromGUID2(*container.puuid, text, 40))
++        info.groupId = convertCharPointerToStdString(text);
++    }
++    PropVariantClear(&container);
++  }
++
+   // Get audio client
+   hr = devicePtr->Activate( __uuidof( IAudioClient ), CLSCTX_ALL, NULL, ( void** ) &audioClient );
+   if ( FAILED( hr ) ) {
+@@ -5460,7 +5500,7 @@
+     }
+ 
+     stream_.nDeviceChannels[mode] = deviceFormat->nChannels;
+-    captureAudioClient->GetStreamLatency( ( long long* ) &stream_.latency[mode] );
++    stream_.latency[mode] = 0; // Querying before Initialize fails; never write REFERENCE_TIME through a 32-bit pointer.
+   }
+ 
+   // If an output device and is configured for loopback (input mode)
+@@ -5490,7 +5530,7 @@
+     }
+ 
+     stream_.nDeviceChannels[mode] = deviceFormat->nChannels;
+-    captureAudioClient->GetStreamLatency( ( long long* ) &stream_.latency[mode] );
++    stream_.latency[mode] = 0;
+   }
+ 
+   // If output device and is configured for output.
+@@ -5516,7 +5556,7 @@
+     }
+ 
+     stream_.nDeviceChannels[mode] = deviceFormat->nChannels;
+-    renderAudioClient->GetStreamLatency( ( long long* ) &stream_.latency[mode] );
++    stream_.latency[mode] = 0;
+   }
+ 
+   // Fill stream data
+@@ -5992,6 +6032,13 @@
+ 
+       // if callback has not requested the stream to stop
+       if ( callbackPulled && !callbackStopped ) {
++        if (renderAudioClient) {
++          UINT32 padding = 0;
++          if (SUCCEEDED(renderAudioClient->GetCurrentPadding(&padding))) {
++            const unsigned int ringFrames = renderBuffer.availableSamples() / stream_.nDeviceChannels[OUTPUT];
++            outputQueueFrames_.store((unsigned int)ceil((padding + ringFrames) / renderSrRatio) + stream_.bufferSize, std::memory_order_relaxed);
++          }
++        }
+         // Execute user callback method
+         callbackResult = callback( stream_.userBuffer[OUTPUT],
+                                    stream_.userBuffer[INPUT],
+@@ -11590,4 +11637,3 @@
+   // End:
+   //
+   // vim: et sts=2 sw=2
+-

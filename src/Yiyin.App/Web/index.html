@@ -1,0 +1,6 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>易音 · 平板机架</title><link rel="stylesheet" href="tablet.css"><link rel="stylesheet" href="rack-row.css"><link rel="stylesheet" href="rack.css"></head><body data-theme="graphite">
+<header><strong>易音</strong><span id="connection">未连接</span><button id="fullscreen">全屏</button><button id="reconnect">重新连接</button></header>
+<form id="pair"><label>连接码 <input id="code" inputmode="numeric" autocomplete="one-time-code" maxlength="6" required></label><button>连接机架</button><p id="pair-error" role="status"></p></form>
+<nav hidden><button id="show-rack">音频机架</button><button id="show-lighting"></button><button id="show-music"></button></nav><div id="page-tabs" hidden></div><div class="workspace" hidden></div>
+<main id="rack-workspace" class="rack-workspace" hidden><div class="rack-heading"><strong>音频机架</strong><span id="rack-status"></span><span id="rack-output-status"></span></div><p class="rack-help">与电脑同步可见轨道 · 双击推子归零 · 编辑、设备与插件原生窗口在电脑操作</p><div id="rack-tracks" class="rack-tracks" tabindex="0" aria-label="机架通道"></div></main>
+<div id="toast" role="status"></div><script src="rack-row.js"></script><script src="rack.js"></script><script src="tablet.js"></script></body></html>
