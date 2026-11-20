@@ -6,6 +6,16 @@
 
 **个人非商业使用免费，禁止商用。** 本项目公开源代码供个人学习、修改和非商业分享，采用 [易音个人非商业使用许可](LICENSE)。它是 source-available 项目，不是 OSI 定义的开源项目。商业演出、商业直播、收费录音/后期、企业经营和有偿服务等均不在免费许可范围内。
 
+## Windows 实机截图
+
+**机架编辑界面**　从左到右是话筒输入、人声编组和主输出。右侧的轨道设置显示当前路由，旁边是插件库。
+
+![易音 1.2.0 机架编辑界面，显示话筒、人声编组、主输出和轨道路由](assets/screenshots/v1.2.0/rack.png)
+
+**多设备音频 I/O**　图中以 XT2400（NVIDIA）为主时钟，采样率为 48 kHz。「双输出」通道同时送往 NVIDIA 的左右声道和 Realtek 的右声道。
+
+![易音 1.2.0 音频 I/O，NVIDIA 的左右声道和 Realtek 的右声道已勾选](assets/screenshots/v1.2.0/audio-io.png)
+
 ## 安装
 
 在 [Releases](https://github.com/YiJunProject/Yiyin/releases) 下载 `Yiyin-v1.2.0-win-x64-Setup.exe`，退出旧版后覆盖安装。Windows 10/11 x64，自包含 .NET 运行时。安装包未数字签名。

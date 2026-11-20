@@ -26,8 +26,8 @@
     },
     {
       "path": "README.md",
-      "length": 3875,
-      "sha256": "2c97df37ed53abd183abe29264fd26114d2b6adc42e6ff1513821a7677dd31f8"
+      "length": 4488,
+      "sha256": "2d90ab2c493a13c654185b279425a14b3146dd0181bcfbff18d9009938366d4f"
     },
     {
       "path": "THIRD-PARTY-NOTICES.md",
@@ -48,6 +48,16 @@
       "path": "assets/yiyin.ico",
       "length": 95996,
       "sha256": "89971b945349dbae4e85a2d1f253727defcde8c68bebd9f06c72116dcbc8bafc"
+    },
+    {
+      "path": "assets/screenshots/v1.2.0/audio-io.png",
+      "length": 54586,
+      "sha256": "78cf354db08664d0368b01924b2abbc40eca035603535a90a30d9d7b9766793c"
+    },
+    {
+      "path": "assets/screenshots/v1.2.0/rack.png",
+      "length": 103913,
+      "sha256": "74e486826b33d8d9510ef5c434c3fd9a83fe325b04dff5ae700091f510e8efaa"
     },
     {
       "path": "installer/Yiyin.iss",
