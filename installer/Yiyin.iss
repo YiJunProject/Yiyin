@@ -7,7 +7,7 @@
 [Setup]
 AppId={{F80EB547-59E8-40B2-BA81-EE1676EB12D1}
 AppName=易音
-AppVersion=1.1.0
+AppVersion=1.2.0
 AppPublisher=噫菌
 AppPublisherURL=https://github.com/YiJunProject/Yiyin
 AppSupportURL=https://github.com/YiJunProject/Yiyin/issues
@@ -22,7 +22,7 @@ ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 MinVersion=10.0
 OutputDir={#OutputDir}
-OutputBaseFilename=Yiyin-v1.1.0-win-x64-Setup
+OutputBaseFilename=Yiyin-v1.2.0-win-x64-Setup
 SetupIconFile=..\assets\yiyin.ico
 UninstallDisplayIcon={app}\Yiyin.exe
 Compression=lzma2

@@ -182,10 +182,22 @@ public sealed partial class MainWindow {
             }
             finally { window._rackCommit.Release(); }
         }
+        public async Task PreviewHardwareRoutesAsync(RackProject project, RackLocalSettings local)
+        {
+            RequireEditing();
+            var service = window.RackService;
+            var identity = RackIdentity;
+            await window._rackCommit.WaitAsync();
+            try
+            {
+                RequireCurrent(service); RequireRack(identity); RequireEditing();
+                await service.PreviewHardwareRoutesAsync(project, local);
+            }
+            finally { window._rackCommit.Release(); }
+        }
         public async Task ApplyIoAsync(RackProject project, RackLocalSettings local)
         {
-            RequireEditing(); var identity = RackIdentity; project.Validate(); local.Validate();
-            if (local.RoutePlayer && project.PlaybackTrackId is null) throw new ArgumentException("请选择播放器接入的立体声播放轨。");
+            RequireEditing(); var identity = RackIdentity; local.RoutePlayer = false; project.PlaybackTrackId = null; project.Validate(); local.Validate();
             var service = window.RackService; await window._rackCommit.WaitAsync();
             try
             {
@@ -196,14 +208,16 @@ public sealed partial class MainWindow {
                 local.PluginLocations = new(Local.PluginLocations); local.PluginCatalog = Local.PluginCatalog.ToList(); local.ScanDirectories = [.. Local.ScanDirectories]; local.PluginFileStamps = new(Local.PluginFileStamps); local.InsertHeight = Local.InsertHeight; local.SendHeight = Local.SendHeight; local.OutputHeight = Local.OutputHeight; local.FaderHeight = Local.FaderHeight;
                 local.PluginDefaultDirectoriesInitialized = Local.PluginDefaultDirectoriesInitialized; local.InitialPluginScanCompleted = Local.InitialPluginScanCompleted;
                 local.RowAppearance = Local.RowAppearance.Copy(); local.CompactView = Local.CompactView; local.FavoritePlugins = [.. Local.FavoritePlugins]; local.RecentPlugins = [.. Local.RecentPlugins];
+                local.ShowRackInsert = Local.ShowRackInsert; local.ShowRackSend = Local.ShowRackSend; local.ShowRackOutput = Local.ShowRackOutput;
+                local.ShowRackInspector = Local.ShowRackInspector; local.ShowRackLibrary = Local.ShowRackLibrary;
                 try
                 {
-                    
                     RequireCurrent(service); RequireEditing(); await service.ResetConfigurationAsync(draft, local); RequireCurrent(service);
                     _ownerProject.Rack = service.Project; window.RackAppSettings.RackLocal = local;
                     if (!window.TrySaveProject(false)) throw new IOException("音频 I/O 工程配置未保存。");
                     window.RackSettingsStore.Save(window.RackAppSettings);
-                    if (local.InitialPluginScanCompleted || local.PluginCatalog.Count > 0) await service.EnsureReadyAsync();
+                    if (local.IoMode != "single" || wasRunning || local.InitialPluginScanCompleted || local.PluginCatalog.Count > 0)
+                        await service.EnsureReadyAsync();
                     RequireCurrent(service); window.RackSettingsStore.Save(window.RackAppSettings); window.RackUiChanged?.Invoke();
                 }
                 catch

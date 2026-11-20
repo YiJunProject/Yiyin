@@ -68,6 +68,14 @@ public static partial class RackWorkspaceAudit
         {
             if (FailApply) throw new IOException("隔离显示状态保存失败"); Project.FindTrack(id)!.Visible = visible; VisibilityCalls++; Notify(); return Task.CompletedTask;
         }
+        public IReadOnlyList<RackUiDevice>? IoFixtureDevices;
+        public List<RackLocalSettings> HardwarePreviews { get; } = [];
+        public TaskCompletionSource? HoldNextPreview;
+        public async Task PreviewHardwareRoutesAsync(RackProject project, RackLocalSettings local)
+        {
+            if (HoldNextPreview is { } gate) { HoldNextPreview = null; await gate.Task; }
+            local.Validate(); HardwarePreviews.Add(CopyLocal(local));
+        }
         public Task ApplyIoAsync(RackProject project, RackLocalSettings local)
         {
             project.Validate(); if (FailApply || FailLocal) throw new IOException("隔离 I/O 保存失败");

@@ -1,4 +1,7 @@
-#include "asio_backend.h"
+#define YIDECK_ENGINE_AUDIT
+#define main yideck_engine_entry_unused
+#include "../src/engine.cpp"
+#undef main
 #include <iostream>
 #include <cstdlib>
 static std::atomic<bool> watch{false};
@@ -108,6 +111,61 @@ struct Fake final : IASIO {
     t.timeInfo.samplePosition.lo = (unsigned long)position;
     cb.bufferSwitchTimeInfo(&t, 0, ASIOTrue);
     position += size;
+  }
+};
+struct RackGraphEditAudit {
+  static void hybrid(auto &check) {
+    Fake driver;
+    DriverEntry id{"asio:test-hybrid", "Fixture hybrid", {}};
+    Engine engine;
+    engine.asio = std::make_unique<Backend>(&driver, id);
+    Json main = {{"deviceId", id.id}, {"channels", 2}};
+    Json absent = {{"deviceId", "WASAPI-missing-fixture"}, {"channels", 1}};
+    Json cfg = {{"api", "asio"}, {"ioMode", "hybrid"}, {"clockOutputDeviceId", id.id},
+                {"inputEndpoints", Json::array({absent, main})}, {"outputEndpoints", Json::array({absent, main})}};
+    // Inject the driver's IASIO identity, reusing the production layout preparation.
+    engine.config = cfg;
+    engine.endpointSpecs = engine.prepareEndpoints(cfg, 48000, &engine.asio->description());
+    engine.inCh = engine.outCh = 3;
+    check(engine.endpointSpecs[1].input && engine.endpointSpecs[1].offset == 1 &&
+          engine.endpointSpecs[3].clock && engine.endpointSpecs[3].offset == 1,
+          "hybrid accepts ASIO duplex after missing auxiliary on each side");
+    auto corrupt = cfg;
+    corrupt["outputEndpoints"][0]["deviceId"] = "asio:other";
+    bool rejected = false;
+    try { engine.prepareEndpoints(corrupt, 48000, &engine.asio->description()); }
+    catch (const std::runtime_error &) { rejected = true; }
+    check(rejected, "second ASIO driver rejected in hybrid");
+    Json graph = {{"nodes", Json::array({
+      {{"id","input"},{"kind","input"},{"endpointId",id.id},{"deviceChannels",{0,1}}},
+      {{"id","output"},{"kind","output"},{"endpointId",id.id},{"deviceChannels",{0,1}}}})},
+      {"edges",Json::array({{{"id","thru"},{"from","input"},{"to","output"}}})}};
+    auto prepared = engine.command({{"op","setGraph"},{"graph",graph}});
+    auto started = engine.command({{"op","start"}});
+    check(prepared["hardwareReady"] && started["running"] && driver.buffers.size()==4,
+          "engine starts one ASIO duplex driver at its physical width with two missing auxiliary streams");
+    SampleCodec codec(driver.sampleType);
+    for (int i=0; i<driver.size; ++i) {
+      codec.write(driver.bytes[0][0].data()+i*4,.375f);
+      codec.write(driver.bytes[1][0].data()+i*4,-.25f);
+    }
+    auto before=allocations.load();
+    watch = true;
+    for (int i=0; i<32; ++i) driver.tick();
+    watch = false;
+    auto status=engine.command({{"op","status"}});
+    auto muted=std::count_if(status["endpoints"].begin(),status["endpoints"].end(),
+                             [](const auto &p){ return p.value("muted",false); });
+    check(allocations.load()==before && status["callbackCount"]==32 && status["processedFrames"]==32*256 &&
+          codec.read(driver.bytes[2][0].data())==.375f && codec.read(driver.bytes[3][0].data())==-.25f,
+          "production hybrid engine routes distinct stereo samples and processes once per fixture ASIO callback without allocation");
+    check(muted==2 && status["endpoints"].size()==4 && status["running"] && status["mediaClockOutputDeviceId"]==id.id,
+          "hybrid status retains missing auxiliary input/output and advancing ASIO master");
+    driver.cb.asioMessage(kAsioResetRequest,0,nullptr,nullptr);
+    engine.idle();
+    status=engine.command({{"op","status"}});
+    check(driver.stops==1 && driver.released && !status["running"].get<bool>() && status["restartRequired"],
+          "ASIO clock reset stops the aggregate and releases the driver");
   }
 };
 int main() {
@@ -263,6 +321,9 @@ int main() {
           nullptr);
       check(rateDriver.rateWrites == 1, "explicit rate applied once");
     }
+    CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+    RackGraphEditAudit::hybrid(check);
+    CoUninitialize();
     std::cout << Json{{"passed", true},
                       {"checks", checks},
                       {"hardwareOpened", false},

@@ -30,7 +30,7 @@ public sealed partial class MainWindow
                 Sends = t.Sends.Select(s => new { s.Id, s.TargetTrackId }).ToArray(),
                 Plugins = t.Inserts.Select(p => new { p.Id, p.Identity.Key, p.Identity.Name }).ToArray()
             }),
-            rack.InputPorts, rack.OutputPorts, LocalInputPorts = local.InputPorts, LocalOutputPorts = local.OutputPorts,
+            rack.InputPorts, rack.OutputPorts, LocalInputPorts = local.InputPorts, LocalOutputPorts = local.OutputPorts, local.IoMode, local.OutputMirrors,
             local.RowAppearance, local.DeviceApi, local.OutputDeviceName, local.InsertHeight, local.SendHeight, local.OutputHeight, local.FaderHeight, local.CompactView,
             rack.ActiveDisplayViewId, DisplayViewName = rack.DisplayViews.FirstOrDefault(v => v.Id == rack.ActiveDisplayViewId)?.Name,
             Density = WorkspaceUiDensity.Mode
@@ -42,14 +42,7 @@ public sealed partial class MainWindow
         Dispatcher.VerifyAccess();
         var rack = TabletRackProject; var local = TabletRackLocal; var state = _rackService?.Status ?? new RackUiStatus();
         var enabled = Project.TabletAccess.AllowRack && !_closing && !_projectTransition && !_rackEditing && state.IsRunning && !state.IsBusy;
-        string PhysicalChannels(RackTrack track, bool input)
-        {
-            var port = (input ? rack.InputPorts : rack.OutputPorts).FirstOrDefault(p => p.Id == (input ? track.InputPortId : track.HardwareOutputPortId));
-            if (port is null) return "未分配" + (input ? "输入" : "输出");
-            return (input ? local.InputPorts : local.OutputPorts).TryGetValue(port.Id, out var map)
-                ? port.Name + " · " + map.DeviceName + " · " + string.Join(" / ", map.Channels.Select(c => c + 1))
-                : port.Name + " · 本机硬件通道未分配";
-        }
+
         TabletRackPlugin Plugin(RackPluginInstance plugin)
         {
             var error = state.PluginErrors?.GetValueOrDefault(plugin.Id);
@@ -74,8 +67,8 @@ public sealed partial class MainWindow
             return new TabletRackTrack(t.Id, t.Name, t.Color, t.Kind.ToString(), t.GainDb, t.Pan,
                 !t.Mute && (t.Kind is not (RackTrackKind.Mono or RackTrackKind.Stereo) || t.Monitor),
                 connections.ToArray(), state.Meters?.GetValueOrDefault(t.Id) ?? new(),
-                "来源 · " + (t.Kind is RackTrackKind.Playback ? "内部音视频" : t.Kind is RackTrackKind.Mono or RackTrackKind.Stereo ? PhysicalChannels(t, true) : "上游轨道"),
-                t.Kind is RackTrackKind.Output ? PhysicalChannels(t, false) : "", t.Inserts.Select(Plugin).ToArray(),
+                "来源 · " + (t.Kind is RackTrackKind.Playback ? "内部音视频" : t.Kind is RackTrackKind.Mono or RackTrackKind.Stereo ? RackWorkspaceControl.PhysicalChannels(rack, local, t, true) : "上游轨道"),
+                t.Kind is RackTrackKind.Output ? RackWorkspaceControl.PhysicalChannels(rack, local, t, false) : "", t.Inserts.Select(Plugin).ToArray(),
                 double.IsFinite(latency) && latency >= 0 ? latency : null);
         }).ToArray();
         var actual = state.ActualSampleRate > 0 && state.ActualBufferFrames > 0 ? $"{state.ActualSampleRate / 1000d:0.#} kHz · {state.ActualBufferFrames} 帧" : "实际采样 / 缓冲待连接";

@@ -5,10 +5,12 @@ namespace LightDeck.App;
 public sealed record RackUiMeter(double PeakLeft = 0, double PeakRight = 0, bool Clipped = false, double RmsLeft = 0, double RmsRight = 0);
 public sealed record RackPluginScanProgress(bool IsRunning = false, bool IsIncremental = false, string Phase = "", int Completed = 0, int Total = 0, string CurrentFile = "", bool Deferred = false);
 public sealed record RackUiOutputSignal(double LastBlockPeak, double PeakSinceReset, long OverRangeSamples, long NonFiniteSamples, long FramesObserved, long? IntegerOutputOverRangeSamples = null);
+public sealed record RackUiEndpointStatus(string DeviceId, bool Input, bool Clock, bool Muted, int SampleRate, double DriftPpm, string Error);
 public sealed record RackUiStatus(bool IsRunning = false, bool IsBusy = false, string Message = "机架已停止", double CpuPercent = 0,
     double LatencyMilliseconds = 0, IReadOnlyDictionary<Guid, RackUiMeter>? Meters = null, int ActualSampleRate = 0, int ActualBufferFrames = 0,
     IReadOnlyDictionary<Guid, double>? PluginLatencyMilliseconds = null, string Api = "wasapi", bool DriverResetRequired = false,
-    IReadOnlyDictionary<Guid, string>? PluginErrors = null, RackPluginScanProgress? ScanProgress = null, RackUiOutputSignal? OutputSignal = null);
+    IReadOnlyDictionary<Guid, string>? PluginErrors = null, RackPluginScanProgress? ScanProgress = null, RackUiOutputSignal? OutputSignal = null,
+    IReadOnlyList<RackUiEndpointStatus>? Endpoints = null);
 public sealed record RackUiDevice(string Id, string Name, string Api, int InputChannels, int OutputChannels, IReadOnlyList<int>? SampleRates = null, int PreferredSampleRate = 0,
     string GroupId = "", string GroupName = "", string Manufacturer = "", bool Available = true, bool ProbeRequired = false,
     IReadOnlyList<string>? InputChannelNames = null, IReadOnlyList<string>? OutputChannelNames = null, int CurrentSampleRate = 0,
@@ -58,6 +60,7 @@ public interface IRackUiHost
     {
         var project = Project.Copy(); project.DisplayViews = views.Select(v => v.Copy()).ToList(); project.ApplyDisplayView(activeId); return ApplyProjectAsync(project);
     }
+    Task PreviewHardwareRoutesAsync(RackProject project, RackLocalSettings local) => Task.FromException(new InvalidOperationException("当前机架不支持实时通道映射。"));
     Task ApplyIoAsync(RackProject project, RackLocalSettings local);
     Task SelectTrackAsync(Guid? id);
     Task ScanPluginsAsync(CancellationToken token);

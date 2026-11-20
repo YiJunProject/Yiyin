@@ -1,4 +1,4 @@
-param([string]$Output='native-audio/bin-v1.1.0',[string]$Dependencies,[string]$BuildDirectory='native-audio/build-v110',[switch]$EnableAsio,[string]$AsioInclude)
+param([string]$Output='native-audio/bin-v1.2.0',[string]$Dependencies,[string]$BuildDirectory='native-audio/build-v120',[switch]$EnableAsio,[string]$AsioInclude)
 $ErrorActionPreference='Stop'
 $root=Split-Path -Parent $PSScriptRoot
 if(!$Dependencies){$Dependencies=Join-Path $root 'third_party'}
@@ -20,5 +20,5 @@ if($EnableAsio){
     $dependenciesList+=$asioMetadata
 }
 $binaries=[ordered]@{};foreach($name in @('Yideck.Audio.Engine.exe','Yideck.Audio.Scan.exe')){$binaries[$name]=(Get-FileHash -LiteralPath (Join-Path $outputPath $name)).Hash.ToLowerInvariant()}
-$record=[ordered]@{schema=1;product='Yiyin.Audio';version='1.1.0';asBuiltAsio=[bool]$EnableAsio;dependencies=$dependenciesList;build=[ordered]@{architecture='Windows x64';configuration='Release';msvcRuntime='static /MT';vst3StaticCrt=$true;enabledBackends=$backends;productVersion='1.1.0.0';runtimeDirectory=$Output};patches=$base.patches;binaries=$binaries;standalonePatch=$base.standalonePatch}
-$record | ConvertTo-Json -Depth 12 | Set-Content -LiteralPath "$root/native-audio/dependencies.v1.1.0.lock.json" -Encoding utf8
+$record=[ordered]@{schema=1;product='Yiyin.Audio';version='1.2.0';asBuiltAsio=[bool]$EnableAsio;dependencies=$dependenciesList;build=[ordered]@{architecture='Windows x64';configuration='Release';msvcRuntime='static /MT';vst3StaticCrt=$true;enabledBackends=$backends;productVersion='1.2.0.0';runtimeDirectory=$Output};patches=$base.patches;binaries=$binaries;standalonePatch=$base.standalonePatch}
+$record | ConvertTo-Json -Depth 12 | Set-Content -LiteralPath "$root/native-audio/dependencies.v1.2.0.lock.json" -Encoding utf8

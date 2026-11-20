@@ -33,7 +33,7 @@ internal static partial class UiPluginChecks
  [STAThread] static int Main(string[] args){
   Evidence=Path.GetFullPath(args[0]);Directory.CreateDirectory(Evidence);Environment.SetEnvironmentVariable("YIYIN_NO_AUDIO","1");
   var app=new Application{ShutdownMode=ShutdownMode.OnExplicitShutdown};int exit=0;
-  app.Startup+=async(_,_)=>{try{if(args.Contains("--v110-host"))await RunHost(args.Contains("--baseline"));else await Run(args.Contains("--before"));}catch(Exception e){exit=1;Console.Error.WriteLine(e);File.WriteAllText(Path.Combine(Evidence,"failure.txt"),e.ToString());}finally{
+  app.Startup+=async(_,_)=>{try{if(args.Contains("--multi-output"))await CheckMultiOutput(args[2], args[3]);else if(args.Contains("--v110-host"))await RunHost(args.Contains("--baseline"));else await Run(args.Contains("--before"));}catch(Exception e){exit=1;Console.Error.WriteLine(e);File.WriteAllText(Path.Combine(Evidence,"failure.txt"),e.ToString());}finally{
    if(Window is not null){await Window.RackService.DisposeAsync();typeof(MainWindow).GetField("_exitReady",Flags)!.SetValue(Window,true);Window.Close();}
    File.WriteAllText(Path.Combine(Evidence,"result.json"),JsonSerializer.Serialize(new{exit,checks=Checks},ProjectStore.JsonOptions));app.Shutdown(exit);
   }};return app.Run();

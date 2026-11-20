@@ -13,6 +13,14 @@ namespace LightDeck.App;
 
 public static partial class RackWorkspaceAudit
 {
+    private static void Modal(Window owner, Action open, Action<Window> answer)
+        => ModalTask(owner, open, dialog => { answer(dialog); return Task.CompletedTask; });
+    private static void ModalTask(Window owner, Action open, Func<Window, Task> answer)
+    {
+        Exception? failure = null; var answered = false;
+        owner.Dispatcher.BeginInvoke(new Action(async () => { Window? dialog = null; try { await Settle(); dialog = Application.Current.Windows.Cast<Window>().Single(w => w.IsVisible && ReferenceEquals(w.Owner, owner)); answered = true; await answer(dialog); } catch (Exception ex) { failure = ex; dialog?.Close(); } }), DispatcherPriority.ApplicationIdle);
+        open(); if (failure is not null) throw failure; if (!answered) throw new InvalidOperationException("Expected modal dialog was not handled.");
+    }
     private static void Click(Button button) => button.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
     private static bool StripsFillViewport(RackWorkspaceControl view)
     {
@@ -55,7 +63,7 @@ public static partial class RackWorkspaceAudit
         public Task SelectTrackAsync(Guid? id) { Project.SelectedTrackId = id; Notify(); return Task.CompletedTask; }
         public Task ScanPluginsAsync(CancellationToken token) => FixtureScanAsync(false, token);
         public Task ShowPluginEditorAsync(Guid trackId, Guid insertId, nint owner) { EditorTarget = (trackId, insertId); return Task.CompletedTask; }
-        public Task<IReadOnlyList<RackUiDevice>> EnumerateDevicesAsync(string? api = null) => Task.FromResult<IReadOnlyList<RackUiDevice>>((api ?? Local.DeviceApi) == "asio" ? AsioDevices : [new("fixture-input", "隔离输入设备", "wasapi", 8, 0, [44100, 48000], 48000, "card-one", "隔离声卡"), new("fixture-output", "隔离输出设备", "wasapi", 0, 8, [44100, 48000, 96000], 48000, "card-one", "隔离声卡"), new("fixture-output-alt", "另一输出设备", "wasapi", 0, 2, [44100, 48000, 96000], 44100, "card-one", "隔离声卡"), new("other-input", "另一声卡输入", "wasapi", 1, 0, [44100], 44100, "card-two", "隔离声卡"), new("other-output", "另一声卡输出", "wasapi", 0, 2, [44100], 44100, "card-two", "隔离声卡")]);
+        public Task<IReadOnlyList<RackUiDevice>> EnumerateDevicesAsync(string? api = null) => Task.FromResult<IReadOnlyList<RackUiDevice>>((api ?? Local.DeviceApi) == "asio" ? AsioDevices : IoFixtureDevices ?? [new("fixture-input", "隔离输入设备", "wasapi", 8, 0, [44100, 48000], 48000, "card-one", "隔离声卡"), new("fixture-output", "隔离输出设备", "wasapi", 0, 8, [44100, 48000, 96000], 48000, "card-one", "隔离声卡"), new("fixture-output-alt", "另一输出设备", "wasapi", 0, 2, [44100, 48000, 96000], 44100, "card-one", "隔离声卡"), new("other-input", "另一声卡输入", "wasapi", 1, 0, [44100], 44100, "card-two", "隔离声卡"), new("other-output", "另一声卡输出", "wasapi", 0, 2, [44100], 44100, "card-two", "隔离声卡")]);
         public static RackProject CreateProject()
         {
             var a = RackTrack.Create(RackTrackKind.Mono, "话筒 1"); a.GainDb = -6; a.Monitor = true;

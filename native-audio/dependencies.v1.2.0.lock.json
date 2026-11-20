@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "product": "Yiyin.Audio",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "asBuiltAsio": true,
   "dependencies": [
     {
@@ -92,16 +92,16 @@
       "WASAPI",
       "ASIO"
     ],
-    "productVersion": "1.1.0.0",
-    "runtimeDirectory": "native-audio/bin-v1.1.0"
+    "productVersion": "1.2.0.0",
+    "runtimeDirectory": "native-audio/bin-v1.2.0"
   },
   "patches": {
     "rtaudio-wasapi.patch": "9c1ba74c6e8633f78b2a7c5b1df22b1ff1a4ffb0c37c57b83c2fed046aa38b21",
     "vst3-utf8-path.patch": "fee9b17e48f423fad5e11c96c0e05a24d68d6f2a69e62b43c33a41c5644646f7"
   },
   "binaries": {
-    "Yideck.Audio.Engine.exe": "75d6b74bec5b104ba69093c4dc260a74402feaf78fe9ef0a86e249caa775fed3",
-    "Yideck.Audio.Scan.exe": "036fa4ae9b600529f6f64980bb48f11ac9c3e2463d0f4f75396885c967d38d99"
+    "Yideck.Audio.Engine.exe": "a22817420ff91a777ea3861271a6bca8986714a0e9913792d9f3c1378fe4c499",
+    "Yideck.Audio.Scan.exe": "217135b4cc9df5084bc0171695322649c93cd36a51253d096796a023277d00e8"
   },
   "standalonePatch": {
     "sdkOrigin": "Steinberg VST3 SDK pinned public.sdk/source/vst/hosting/plugprovider.cpp",

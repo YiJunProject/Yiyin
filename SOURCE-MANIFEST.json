@@ -1,7 +1,7 @@
 {
   "product": "Yiyin",
-  "version": "1.1.0",
-  "rackSource": "Yideck 1.4.8",
+  "version": "1.2.0",
+  "rackSource": "Yideck 1.6.3",
   "scope": "Pure audio rack; standalone shell and VST3 first-connection fix retained",
   "files": [
     {
@@ -11,8 +11,8 @@
     },
     {
       "path": "使用说明.txt",
-      "length": 3500,
-      "sha256": "b59913eb4f4e59fce664fdfc6a14f613c0f3c1fbc3d3c4a6f929a981399cd33c"
+      "length": 3997,
+      "sha256": "9d0805eb048944b91daf58d38ad90c0c6ad0d3ee9bf13ecb7060ca6fb0447071"
     },
     {
       "path": "global.json",
@@ -26,8 +26,8 @@
     },
     {
       "path": "README.md",
-      "length": 3667,
-      "sha256": "1202951a30a98f140b68e78b8266a3e4d678354dcd4dba2332992ffa80b53b8d"
+      "length": 3875,
+      "sha256": "2c97df37ed53abd183abe29264fd26114d2b6adc42e6ff1513821a7677dd31f8"
     },
     {
       "path": "THIRD-PARTY-NOTICES.md",
@@ -52,12 +52,12 @@
     {
       "path": "installer/Yiyin.iss",
       "length": 2093,
-      "sha256": "5776dec0bec5fd066da1910935f71b6ce475170ac7c3a495d0012bde2d9b078b"
+      "sha256": "36a3f01898dcfc1fc646bd60dfe9eb4fdb6e73f57dbf951f108f398f757085b7"
     },
     {
       "path": "native-audio/CMakeLists.txt",
-      "length": 8017,
-      "sha256": "44556d1679d56fc5453f7078e92cfd68530809b639434c9e9aa5ba5a09517989"
+      "length": 8166,
+      "sha256": "da7aa796d742a6e873ebfaa9843be7e75d9d7b2a5cc451cc1e3d4b4565877cb8"
     },
     {
       "path": "native-audio/dependencies.v1.0.1.lock.json",
@@ -65,9 +65,9 @@
       "sha256": "9a64e5abb4fd987929385986fbd825760f1db4a7a0944361c4bdcaf9a9b32cc8"
     },
     {
-      "path": "native-audio/dependencies.v1.1.0.lock.json",
+      "path": "native-audio/dependencies.v1.2.0.lock.json",
       "length": 5182,
-      "sha256": "9e85a6d891409ca3e32f2a2934273daa3d9ef42ea41818f5acbead09f2cc6fa4"
+      "sha256": "cb1b2d43eb1d48d125ab663824468b27948b17b9663682b65214ca1c28dc135c"
     },
     {
       "path": "native-audio/deps/json.hpp",
@@ -131,13 +131,13 @@
     },
     {
       "path": "native-audio/src/endpoint_bridge.h",
-      "length": 11815,
-      "sha256": "0620069916acc9bcfbd79393b655e0d7fd4dc89cdf9955df731fc1536d24e14f"
+      "length": 19292,
+      "sha256": "c098cf5574d1e5758d6d367b31c1bcfa979144e69f508e1dd6e33340dcf67253"
     },
     {
       "path": "native-audio/src/engine.cpp",
-      "length": 58542,
-      "sha256": "2383963184331211e7335e4f37ac8fdd850d7bb3ce58bb72c05e8c8a9956ec49"
+      "length": 66723,
+      "sha256": "0bcd33c7655d6e9d49eb569ced230d245a7b64bbfff728b05ef9226fa68c98ca"
     },
     {
       "path": "native-audio/src/interval_meter.h",
@@ -198,6 +198,11 @@
       "path": "native-audio/tests/check_editors.py",
       "length": 5541,
       "sha256": "54224fedd7a60ad8dcc5f12b0623652b618e7b3fa2238510ad17ca469977c217"
+    },
+    {
+      "path": "native-audio/tests/check_independent_wasapi.py",
+      "length": 6450,
+      "sha256": "783a4522fd88853187caa1aaa0216e815524e76df0dca3233302e550261aead6"
     },
     {
       "path": "native-audio/tests/check_installed.py",
@@ -271,8 +276,8 @@
     },
     {
       "path": "native-audio/tests/test_asio.cpp",
-      "length": 10504,
-      "sha256": "efd635f4c2ba454b580741d5c548eb27dc332d8372464cd3646503b27d9b8c4d"
+      "length": 14432,
+      "sha256": "1a9b7f986ba8e46e0e945c88db1fa9664530a60b91c4bc482d5b64c31bfe879a"
     },
     {
       "path": "native-audio/tests/test_device_policy.cpp",
@@ -281,8 +286,8 @@
     },
     {
       "path": "native-audio/tests/test_endpoint_bridge.cpp",
-      "length": 6251,
-      "sha256": "ab6201052723a32d83bea56e52de0be17b8d0c43d8ca7c1ec024b6a567d5641c"
+      "length": 11585,
+      "sha256": "0c323ce3fb154ca46288836a2e4e15e6322008224105830ca8878cbd8661b4bc"
     },
     {
       "path": "native-audio/tests/test_graph_edits.cpp",
@@ -306,8 +311,8 @@
     },
     {
       "path": "native-audio/tests/test_stopped_io.cpp",
-      "length": 6257,
-      "sha256": "71851a2aa9a0f115cd630950f54d4cc1dc55962f714254050bb689ce3951fe69"
+      "length": 10882,
+      "sha256": "48b618361a667b7b6bfe64a9b398ff3ab1533019dca19215d502a2a7a2aa925c"
     },
     {
       "path": "native-audio/tests/test_vst2_live.cpp",
@@ -347,17 +352,17 @@
     {
       "path": "scripts/build-installer.ps1",
       "length": 950,
-      "sha256": "f0e74b52073dc339fd4bb46d6efaf13344693af10979fdd37d756b675ee16234"
+      "sha256": "f3cded7b6815d1f3df3b0c829939854b390879149c6c48810d07219dcc3d6406"
     },
     {
       "path": "scripts/build-native.ps1",
-      "length": 2696,
-      "sha256": "e53b8ffe9ada68e3b1c54dad6b486702a5996cf53728689526047a8d45dbfb5d"
+      "length": 2719,
+      "sha256": "b219fb3b8ebe4771a6460f7edb081fba446cd2e1095e5efefae6a9285a8b739c"
     },
     {
       "path": "scripts/build.ps1",
       "length": 997,
-      "sha256": "37fccb8c740f849970260166675e827876f6643883bdd661ddda8b9a53243f16"
+      "sha256": "d5dcba7d963898f7e7a03d139a72f347e742e46b2b419e612894496312bd093a"
     },
     {
       "path": "scripts/prepare-native-deps.ps1",
@@ -381,8 +386,8 @@
     },
     {
       "path": "src/Yiyin.App/AudioRackService.cs",
-      "length": 48101,
-      "sha256": "e70c38b42ae5c7c6d902cfbab54d01dac6d3160b242011b612854a7b834649de"
+      "length": 48942,
+      "sha256": "0f054036445ace12897295c1ecab1658c77c0ac9e0c151ce89faa7a2c73c8fd0"
     },
     {
       "path": "src/Yiyin.App/AudioRackService.Devices.cs",
@@ -391,8 +396,8 @@
     },
     {
       "path": "src/Yiyin.App/AudioRackService.Diagnostics.cs",
-      "length": 16908,
-      "sha256": "113d86e510841e49534a67d94cd378c34e816649ad06b4eda52b30330f1a1737"
+      "length": 16931,
+      "sha256": "4e3332084d0b4578fec594223e67d33c7cba5803ba0051a3397df6da831688ff"
     },
     {
       "path": "src/Yiyin.App/AudioRackService.GraphEdits.cs",
@@ -403,6 +408,11 @@
       "path": "src/Yiyin.App/AudioRackService.HardwareReadiness.cs",
       "length": 834,
       "sha256": "d3826b21f6d0f8da9d35f2d9eee02296b1203a9f92323436c8d67cf82acc68c2"
+    },
+    {
+      "path": "src/Yiyin.App/AudioRackService.HardwareRoutes.cs",
+      "length": 7217,
+      "sha256": "75f82a60b65717291c78c09707b854b91cbfa2b290040dca6b5192fb787abd9b"
     },
     {
       "path": "src/Yiyin.App/AudioRackService.Plugins.cs",
@@ -426,13 +436,13 @@
     },
     {
       "path": "src/Yiyin.App/MainWindow.cs",
-      "length": 16853,
-      "sha256": "04da88298b6bfb7bb96f0ecadaf32c3662baef6c14c24223b936fcc31f7223b0"
+      "length": 17055,
+      "sha256": "ea5cfc8ac412282e7c2baf71b4592e7a23e26cce64f52f73ca8fc69843492e8d"
     },
     {
       "path": "src/Yiyin.App/MainWindow.RackHost.cs",
-      "length": 28867,
-      "sha256": "77e1ba9a3cd032c44d1b51713228d756a7f1fcc94fb674e53e958dc1caf09c0a"
+      "length": 29635,
+      "sha256": "327cd064a1ecf2327af3fbf84e14b4b77327bd404eafd02e2dedc6428da62a63"
     },
     {
       "path": "src/Yiyin.App/MainWindow.Tablet.cs",
@@ -441,8 +451,8 @@
     },
     {
       "path": "src/Yiyin.App/MainWindow.TabletRack.cs",
-      "length": 10806,
-      "sha256": "c4787987489b800f07943f11d87d8febe360318c237ba6725cb8d9bd42b18635"
+      "length": 10435,
+      "sha256": "f882436eabbfcb91cb61cb847b5a597dba32021005e8436f7a601088b0da9c70"
     },
     {
       "path": "src/Yiyin.App/RackCompactRow.cs",
@@ -456,13 +466,23 @@
     },
     {
       "path": "src/Yiyin.App/RackIoDeviceDialog.cs",
-      "length": 22841,
-      "sha256": "8e2dd3201164d7f87714bdef9c05f35ca9459cd1246c7b1c9a5173469c6d125e"
+      "length": 22360,
+      "sha256": "cefa8f0de6e3dc2ad8c46ea0efdfd684df7fd1e159c26f405658527766f9a301"
+    },
+    {
+      "path": "src/Yiyin.App/RackIoDeviceDialog.Devices.cs",
+      "length": 15170,
+      "sha256": "f5077fa029efd818ea4537c654d47af254cb3ebcfece961f011b2dd5a9b2dec7"
     },
     {
       "path": "src/Yiyin.App/RackIoDeviceDialog.Matrix.cs",
-      "length": 6555,
-      "sha256": "3d7e69ea9464de3eb829b62a161305cab6291cf579beab0ab8e369720f0940ec"
+      "length": 10153,
+      "sha256": "83c70216b8e11ac0c3e6d5eaef2f9d91e482fb06a8837bcf19fbf2cef1c82592"
+    },
+    {
+      "path": "src/Yiyin.App/RackIoDeviceDialog.Routes.cs",
+      "length": 8100,
+      "sha256": "5c46249cba17c28cdb183c5b09c769c2be4b34e9af6b041b50ca83de3a578ba2"
     },
     {
       "path": "src/Yiyin.App/RackLibraryDialog.cs",
@@ -501,8 +521,8 @@
     },
     {
       "path": "src/Yiyin.App/RackUiHost.cs",
-      "length": 5056,
-      "sha256": "c2d0742d60f72832ae21340283bba0eb68c48bf2ec92b594ab1f4c031026e596"
+      "length": 5522,
+      "sha256": "6d4146dd836941d69484c6907a621a751ff2c554e58641d5ac649c46f66982c5"
     },
     {
       "path": "src/Yiyin.App/RackWorkspaceControl.Appearance.cs",
@@ -516,8 +536,8 @@
     },
     {
       "path": "src/Yiyin.App/RackWorkspaceControl.cs",
-      "length": 25664,
-      "sha256": "3d85f00eaf0f6365ca6a3ea8f5934eb46f51c20350c152cd66e5c46feff35652"
+      "length": 26044,
+      "sha256": "2b251e0ad988045d2e05a974054deec476bf3f62ce818fc1998a712f40afdcf5"
     },
     {
       "path": "src/Yiyin.App/RackWorkspaceControl.Drag.cs",
@@ -632,7 +652,7 @@
     {
       "path": "src/Yiyin.App/Yiyin.App.csproj",
       "length": 1709,
-      "sha256": "63ddaf428667aa20278c4e26ef25994f427bac2ad90cd4c6f8542e10a368488d"
+      "sha256": "4b70e6c0a0e37417057284e9665923796d706280900739c81a12aad1b3e924d5"
     },
     {
       "path": "src/Yiyin.App/Web/index.html",
@@ -700,9 +720,14 @@
       "sha256": "fdab07bf1873671ab46d3982235a5029fd404841d8deb3d167e8ebe064ad90db"
     },
     {
+      "path": "src/Yiyin.Core/RackLocalSettings.AudioIo.cs",
+      "length": 2567,
+      "sha256": "e643279ade8cc8543bb73b22c145c97b6d9f142c43c68dcb4eac23d8306845e6"
+    },
+    {
       "path": "src/Yiyin.Core/RackLocalSettings.cs",
-      "length": 5533,
-      "sha256": "2c328f1f070b51595f7b3fdd389b654557d15fe40a9a35d849080e1860e1f465"
+      "length": 5129,
+      "sha256": "e0a25d1d785aab794a8ca87268d8bf4fa58ad313eed41d6b722bb98e0db35f59"
     },
     {
       "path": "src/Yiyin.Core/RackModels.cs",
@@ -736,18 +761,23 @@
     },
     {
       "path": "src/Yiyin.Core/Yiyin.Core.csproj",
-      "length": 250,
-      "sha256": "45c7e59945a29f495b5c1a9ae5d77595ebb084d1a48a0573d64b1e859a605fe9"
+      "length": 253,
+      "sha256": "11531f3075cb18740683ed412dd5b77312757a75b751215bf5c357b11d0c69e1"
+    },
+    {
+      "path": "tests/MultiOutputHostChecks.cs",
+      "length": 3702,
+      "sha256": "184483ed6ad4fb20c58372173cd297f4df6d2d69b8d37a7501a6bb27eb455189"
     },
     {
       "path": "tests/UiPluginChecks.cs",
-      "length": 8585,
-      "sha256": "d07e76a27369fd5fc993125b766e7b1a4c15c94032c2f5b976955b19b3045fb4"
+      "length": 8748,
+      "sha256": "f09f2a9c94691e85f2cf64c19edf6829c0efd5d26227ed7254cc38134d413446"
     },
     {
       "path": "tests/UiPluginChecks.csproj",
-      "length": 814,
-      "sha256": "71eaa182bd15bfea73fa8aff35f55f74083be048698865a3cb3fce90469e1556"
+      "length": 864,
+      "sha256": "190c44f3f010cf48e68066999c02713f63a1c565fc4a32effa5c366437ff9bdc"
     },
     {
       "path": "tests/V110HostChecks.cs",
@@ -756,8 +786,8 @@
     },
     {
       "path": "tests/RackUi/Program.cs",
-      "length": 896,
-      "sha256": "2afbdcfac245d49bf783e351838fbbbce5cc79766447415efd1a4bf44e312d2d"
+      "length": 1011,
+      "sha256": "15e3763463ca8c24ec40896e7b45865f023d15f929a8ff59078512d395762276"
     },
     {
       "path": "tests/RackUi/Rack1407LayoutChecks.cs",
@@ -776,8 +806,8 @@
     },
     {
       "path": "tests/RackUi/RackWorkspaceAudit.cs",
-      "length": 7636,
-      "sha256": "f56426e487c45c6e6fb08a93b39933572d2b585dbb2053b3618308bd5ed646f6"
+      "length": 8502,
+      "sha256": "48f0f11b546040f3762d42e08505332a0af2dcf5263e9fb72e7b1056d13e136a"
     },
     {
       "path": "tests/RackUi/RackWorkspaceAudit.Design.cs",
@@ -786,13 +816,18 @@
     },
     {
       "path": "tests/RackUi/RackWorkspaceAudit.Fixture.cs",
-      "length": 6208,
-      "sha256": "5e55502a937c530c0d52d30dc6b4de67bb3443ae3be11b512d00133cca07812c"
+      "length": 6682,
+      "sha256": "8dd08c34f8362af5ce165656a0736328de6e72c1a147b597aa944f5f804af625"
     },
     {
       "path": "tests/RackUi/RackWorkspaceAudit.Helpers.cs",
       "length": 747,
       "sha256": "2b5ceb040303087a5117e24cf77ded670af2add42fa03f53d20c754b18be2632"
+    },
+    {
+      "path": "tests/RackUi/RackWorkspaceAudit.Io.cs",
+      "length": 23348,
+      "sha256": "f3043baeace9428d1195b676e30ec032e6dd6e4c7cfd0fe5464f45fe888339c2"
     }
   ]
 }

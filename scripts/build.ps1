@@ -1,7 +1,7 @@
 param([string]$Output,[string]$DotnetExe='dotnet',[string]$NugetPackages)
 $ErrorActionPreference='Stop'
 $root=Split-Path -Parent $PSScriptRoot
-if(!$Output){$Output='artifacts/publish/v1.1.0-'+(Get-Date -Format 'yyyyMMdd-HHmmss')}
+if(!$Output){$Output='artifacts/publish/v1.2.0-'+(Get-Date -Format 'yyyyMMdd-HHmmss')}
 $target=if([IO.Path]::IsPathRooted($Output)){$Output}else{Join-Path $root $Output}
 if(Test-Path -LiteralPath $target){throw 'Publish directory exists. Use a fresh path to preserve frozen artifacts.'}
 if([IO.Path]::IsPathRooted($DotnetExe)){$env:DOTNET_ROOT=Split-Path -Parent $DotnetExe}

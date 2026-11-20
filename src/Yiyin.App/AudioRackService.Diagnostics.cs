@@ -30,7 +30,7 @@ internal sealed class RackDiagnosticState(Func<long>? clock = null)
     }
     internal static string Api(string value) => value is "asio" or "wasapi" ? value : "unknown";
     internal static string Operation(string value) => value is "ping" or "devices" or "probeDevice" or "driverControlPanel" or "configure" or "start" or "stop" or "shutdown"
-        or "meters" or "status" or "setGraph" or "beginGraphEdit" or "commitGraphEdit" or "rollbackGraphEdit" or "clearGraph" or "setControls" or "pluginState" or "editor" or "attachMedia" or "detachMedia" or "offline" ? value : "other";
+        or "meters" or "status" or "setGraph" or "setHardwareRoutes" or "beginGraphEdit" or "commitGraphEdit" or "rollbackGraphEdit" or "clearGraph" or "setControls" or "pluginState" or "editor" or "attachMedia" or "detachMedia" or "offline" ? value : "other";
 
     internal static int? AsioErrorCode(string error)
     {

@@ -1,6 +1,6 @@
 # 易音 · Yiyin
 
-独立的 Windows 音频机架。**1.1.0 同步易控 1.4.8 的机架功能**，保留独立工程、配置、安装身份和图标。
+独立的 Windows 音频机架。**1.2.0 同步易控 1.6.3 的机架功能**，保留独立工程、配置、安装身份和图标。
 
 ![易音图标](assets/yiyin-icon-256.png)
 
@@ -8,12 +8,13 @@
 
 ## 安装
 
-在 [Releases](https://github.com/YiJunProject/Yiyin/releases) 下载 `Yiyin-v1.1.0-win-x64-Setup.exe`，退出旧版后覆盖安装。Windows 10/11 x64，自包含 .NET 运行时。安装包未数字签名。
+在 [Releases](https://github.com/YiJunProject/Yiyin/releases) 下载 `Yiyin-v1.2.0-win-x64-Setup.exe`，退出旧版后覆盖安装。Windows 10/11 x64，自包含 .NET 运行时。安装包未数字签名。
 
 既有 `.yiyin` 工程和 `%LOCALAPPDATA%\Yiyin` 配置继续使用。第三方 VST 插件、商业授权及声卡驱动需要自行安装。升级无需删除工程或重新扫描所有已有效记录的插件。
 
 ## 功能
 
+- 音频 I/O 支持专业声卡＋USB 和普通多 USB。主输出可分送各设备左右声道，同组设备运行时支持试听、撤回与保存。
 - ASIO / WASAPI 声卡 I/O，命名输入输出与自动建轨；新输入的监听由用户手动开启。
 - VST2 / VST3 插件、原生编辑器、插件状态保存、BUS / FX、主输出与前后级发送。
 - 多轨 Solo / Mute、FX 默认 Solo Safe；Shift 点击 S 切换 Solo Safe。
@@ -42,7 +43,7 @@ ASIO 构建需要自己取得适用许可并提供匹配的 `asio.h`、`asiosys.
 ./scripts/build-native.ps1 -EnableAsio -AsioInclude 'C:\licensed-asio\include'
 ```
 
-SDK 头文件不会从仓库取得，`third_party`、构建结果、私有协议及用户数据不跟踪。固定依赖、源码适配和实际构建配置记录在 `native-audio/dependencies.v1.1.0.lock.json`；生成器重新构建时更新这个锁文件，旧版本锁保留。详见 [第三方声明](THIRD-PARTY-NOTICES.md)。
+SDK 头文件不会从仓库取得，`third_party`、构建结果、私有协议及用户数据不跟踪。固定依赖、源码适配和实际构建配置记录在 `native-audio/dependencies.v1.2.0.lock.json`；生成器重新构建时更新这个锁文件，旧版本锁保留。详见 [第三方声明](THIRD-PARTY-NOTICES.md)。
 
 `src/Yiyin.App` 为 WPF 和本地平板服务，`src/Yiyin.Core` 为机架数据，`native-audio/src` 为音频宿主。内部 `LightDeck` 命名空间与 `Yideck.Audio.*` 子进程名称沿用协议身份。
 

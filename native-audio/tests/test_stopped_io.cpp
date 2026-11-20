@@ -67,7 +67,78 @@ struct RackGraphEditAudit {
     result=e.command({{"op","setGraph"},{"graph",missing}});
     check("missing endpoint retains existing stopped editing behavior",result["hardwareReady"]==false);
     check("fixture never discovers hardware starts callbacks or opens an editor",!e.audio&&!e.bridge&&e.callbacks==0&&!e.graph->find("source").window);
-    return {{"passed",true},{"checks",checks},{"count",checks.size()},{"boundary","Production Engine with injected endpoint metadata and project VST3 fixture only. No device enumeration, configure, audio callback, third-party VST or editor window."}};
+    Engine matrix;
+    matrix.config={{"api","wasapi"},{"ioMode","multi"}};
+    matrix.endpointSpecs={{"capture","a",2,0,true,false},{"main","a",2,0,false,true},{"phones","b",2,2,false,false}};
+    matrix.inCh=2; matrix.outCh=4;
+    auto route=[](const char *id, int left, int right) {
+      return Json{{"endpointId",id},{"deviceChannels",{left,right}}};
+    };
+    Json capture={{"id","in"},{"kind","input"},{"channels",2},{"hardwareRoutes",{route("capture",0,1)}}};
+    Json out={{"id","out"},{"kind","output"},{"channels",2},
+              {"hardwareRoutes",{route("main",0,1),route("phones",1,0)}}};
+    auto processingNode=capture;
+    processingNode["plugins"]=Json::array({plugin});
+    result=matrix.command({{"op","setGraph"},{"graph",{
+      {"nodes",Json::array({processingNode,out})},{"edges",Json::array({{{"from","in"},{"to","out"}}})}}}});
+    check("multi-card graph prepares both independent stereo targets",result["hardwareReady"]==true);
+    auto *originalGraph=matrix.graph.get(); auto *originalPlugin=&matrix.graph->find("source");
+    const auto matrixState=matrix.command({{"op","pluginState"},{"instanceId","source"}});
+    std::vector<float> input(128);
+    for(int i=0;i<64;++i) { input[i*2]=.5f; input[i*2+1]=.25f; }
+    auto block=[&]() { return matrix.command({{"op","offline"},{"frames",64},{"input",input}}).at("samples").get<std::vector<float>>(); };
+    auto before=block();
+    check("actual delayed VST3 stereo signal reaches both targets with independent channel order",
+          before[252]==.25f&&before[253]==.125f&&before[254]==.125f&&before[255]==.25f);
+    auto apply=[&](const Json &in,const Json &output) {
+      return matrix.command({{"op","setHardwareRoutes"},{"nodes",Json::array({in,output})}});
+    };
+    out["hardwareRoutes"]={route("main",0,1),route("phones",-1,0)};
+    matrix.running=true;
+    result=apply(capture,out);
+    matrix.running=false;
+    auto after=block(); bool continuous=true;
+    for(int i=0;i<64;++i)
+      continuous &= after[i*4]==.25f && after[i*4+1]==.125f && after[i*4+2]==.125f && after[i*4+3]==0;
+    check("hot mute changes one mirror channel while every main sample remains continuous",continuous);
+    check("route change preserves graph, delay memory and live plugin identity/state",
+          matrix.graph.get()==originalGraph&&&matrix.graph->find("source")==originalPlugin&&
+          matrix.command({{"op","pluginState"},{"instanceId","source"}})==matrixState);
+    auto invalid=out; invalid["hardwareRoutes"]=Json::array({route("main",6,1)});
+    matrix.running=true; rejected=false; try {apply(capture,invalid);} catch(...) {rejected=true;} matrix.running=false;
+    check("invalid running matrix leaves previous routing audible",rejected&&block()==after);
+    out["hardwareRoutes"]={route("phones",0,1),route("missing",0,1),route("phones",0,1)};
+    capture["hardwareRoutes"]=Json::array({route("capture",-1,1)});
+    apply(capture,out); after=block();
+    check("missing target and disabled input lane stay silent; duplicate mirror does not double gain",
+          after[252]==0&&after[253]==0&&after[254]==0&&after[255]==.125f);
+    out["hardwareRoutes"]=Json::array(); apply(capture,out); after=block();
+    check("clearing all output targets yields digital silence",std::all_of(after.begin(),after.end(),[](float v){return v==0;}));
+    capture["hardwareRoutes"]=Json::array({route("capture",0,1)});
+    auto mainOnly=out; mainOnly["hardwareRoutes"]=Json::array({route("main",0,1)});
+    auto mirrored=out; mirrored["hardwareRoutes"]=Json::array({route("main",0,1),route("phones",1,0)});
+    apply(capture,mainOnly); block();
+    std::atomic<int> observed{0}; std::atomic<bool> intact{true};
+    matrix.running=true;
+    {
+      std::jthread callback([&](std::stop_token stop){
+        std::vector<float> samples(64*4);
+        while(!stop.stop_requested()) {
+          matrix.processBlock(samples.data(),input.data(),64,0,0);
+          bool mirror=samples[2]!=0;
+          for(int i=0;i<64;++i)
+            if(samples[4*i]!=.25f || samples[4*i+1]!=.125f ||
+               samples[4*i+2]!=(mirror?.125f:0.f) || samples[4*i+3]!=(mirror?.25f:0.f)) intact=false;
+          ++observed;
+        }
+      });
+      while(!observed.load()) std::this_thread::yield();
+      for(int i=0;i<256;++i) apply(capture,i%2 ? mainOnly : mirrored);
+    }
+    matrix.running=false;
+    check("256 live edits during synthetic callbacks preserve every main sample and apply whole blocks",
+          observed>0 && intact.load() && matrix.gateSkips==0 && originalGraph==matrix.activeGraph.load());
+    return {{"passed",true},{"checks",checks},{"count",checks.size()},{"syntheticCallbackCount",observed.load()},{"boundary","Production Engine with injected endpoint metadata, offline blocks, a synthetic callback thread and project VST3 fixture. No physical device, commercial plugin or editor window."}};
   }
 };
 

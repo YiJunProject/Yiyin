@@ -105,7 +105,7 @@ public sealed partial class RackWorkspaceControl : Grid, IDisposable
     private void Refresh()
     {
         if (_disposed) return;
-        var signature = _host.Local.RowAppearance.Signature + ":" + _host.IsEditing + ":" + _host.Project.SelectedTrackId + ":" + _host.Local.RoutePlayer + ":" + string.Join("|", _host.Project.Tracks.Select(t => $"{t.Id}:{t.Name}:{t.Kind}:{t.Color}:{t.Channels}:{t.Visible}:{t.InputPortId}:{t.HardwareOutputPortId}:{t.OutputTrackId}:" + string.Join(',', t.Inserts.Select(p => $"{p.Id}/{p.Identity.Name}")) + ":" + string.Join(',', t.Sends.Select(s => $"{s.Id}/{s.TargetTrackId}")))) + JsonSerializer.Serialize(_host.Project.InputPorts) + JsonSerializer.Serialize(_host.Project.OutputPorts) + JsonSerializer.Serialize(_host.Local.InputPorts) + JsonSerializer.Serialize(_host.Local.OutputPorts);
+        var signature = _host.Local.RowAppearance.Signature + ":" + _host.IsEditing + ":" + _host.Project.SelectedTrackId + ":" + _host.Local.RoutePlayer + ":" + string.Join("|", _host.Project.Tracks.Select(t => $"{t.Id}:{t.Name}:{t.Kind}:{t.Color}:{t.Channels}:{t.Visible}:{t.InputPortId}:{t.HardwareOutputPortId}:{t.OutputTrackId}:" + string.Join(',', t.Inserts.Select(p => $"{p.Id}/{p.Identity.Name}")) + ":" + string.Join(',', t.Sends.Select(s => $"{s.Id}/{s.TargetTrackId}")))) + JsonSerializer.Serialize(_host.Project.InputPorts) + JsonSerializer.Serialize(_host.Project.OutputPorts) + JsonSerializer.Serialize(_host.Local.InputPorts) + JsonSerializer.Serialize(_host.Local.OutputPorts) + JsonSerializer.Serialize(_host.Local.OutputMirrors);
         if (_signature != signature)
         {
             _signature = signature; _strips.Clear(); _soloButtons.Clear(); _sendControls.Clear(); _stripSendControls.Clear(); _mainOutputControls.Clear(); _pluginBypassControls.Clear(); _slotBypassControls.Clear(); _preFaderControls.Clear(); _insertLabels.Clear(); _insertButtons.Clear(); _moduleHeights.Clear(); _stripLayouts.Clear(); _groupHeadings.Clear(); _outputControls.Clear(); _groups.Children.Clear();
@@ -248,14 +248,19 @@ public sealed partial class RackWorkspaceControl : Grid, IDisposable
     {
         var c = (Color)ColorConverter.ConvertFromString(color); return DeckTheme.Brush((c.R * .299 + c.G * .587 + c.B * .114) >= 150 ? "#101820" : "#FFFFFF");
     }
-    private string PhysicalChannels(Guid id, bool input)
+    private string PhysicalChannels(Guid id, bool input) => PhysicalChannels(_host.Project, _host.Local, _host.Project.FindTrack(id), input);
+
+    internal static string PhysicalChannels(RackProject rack, RackLocalSettings local, RackTrack? track, bool input)
     {
-        var track = _host.Project.FindTrack(id); var portId = input ? track?.InputPortId : track?.HardwareOutputPortId;
-        var port = (input ? _host.Project.InputPorts : _host.Project.OutputPorts).FirstOrDefault(p => p.Id == portId);
+        var portId = input ? track?.InputPortId : track?.HardwareOutputPortId;
+        var port = (input ? rack.InputPorts : rack.OutputPorts).FirstOrDefault(p => p.Id == portId);
         if (port is null) return "未分配" + (input ? "输入" : "输出");
-        return (input ? _host.Local.InputPorts : _host.Local.OutputPorts).TryGetValue(port.Id, out var map)
-            ? port.Name + " · " + map.DeviceName + " · " + string.Join(" / ", map.Channels.Select(c => (c + 1).ToString(CultureInfo.InvariantCulture)))
-            : port.Name + " · 本机硬件通道未分配";
+        IEnumerable<RackHardwarePort> targets = input
+            ? local.InputPorts.TryGetValue(port.Id, out var source) ? [source] : []
+            : local.OutputTargets(port.Id);
+        var names = targets.Select(map => map.DeviceName + " · " + string.Join(" / ",
+            map.Channels.Select(c => c < 0 ? "—" : (c + 1).ToString(CultureInfo.InvariantCulture)))).ToArray();
+        return port.Name + " · " + (names.Length == 0 ? "本机硬件通道未分配" : string.Join("，", names));
     }
     internal static string KindLabel(RackTrackKind kind) => kind switch { RackTrackKind.Mono => "话筒 / 单声道", RackTrackKind.Stereo => "立体声输入", RackTrackKind.Playback => "内部音视频", RackTrackKind.Bus => "编组 BUS", RackTrackKind.FX => "效果 FX", _ => "硬件输出" };
     internal static RackLocalSettings CopyLocal(RackLocalSettings local) => JsonSerializer.Deserialize<RackLocalSettings>(JsonSerializer.Serialize(local, ProjectStore.JsonOptions), ProjectStore.JsonOptions)!;

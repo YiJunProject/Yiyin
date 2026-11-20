@@ -1,6 +1,6 @@
 using System.Text.Json;
 namespace LightDeck.Core;
-public sealed class RackLocalSettings
+public sealed partial class RackLocalSettings
 {
     public RackRowAppearance RowAppearance { get; set; } = new();
     public bool RoutePlayer { get; set; }
@@ -50,8 +50,7 @@ public sealed class RackLocalSettings
         if (SampleRate is < 8000 or > 384000 || BufferSize < (DeviceApi == "asio" ? 8 : 16) || BufferSize > 8192 || DeviceApi is not ("wasapi" or "asio")) throw new ArgumentException("音频设备 API、采样率或缓冲大小无效。");
         if (InputChannels is null || OutputChannels is null || InputPorts is null || OutputPorts is null || PluginLocations is null || ScanDirectories is null || PluginCatalog is null || PluginFileStamps is null) throw new ArgumentException("本机机架映射缺失。");
         if (!double.IsFinite(InsertHeight) || InsertHeight is < 0 or > 360 || !double.IsFinite(SendHeight) || SendHeight is < 0 or > 360 || !double.IsFinite(OutputHeight) || OutputHeight is < 48 or > 720 || !double.IsFinite(FaderHeight) || FaderHeight is < 120 or > 720) throw new ArgumentException("插入/发送高度需为 0–360，输出为 48–720，推子为 120–720 像素。");
-        foreach (var entry in InputPorts.Concat(OutputPorts))
-            if (entry.Key == Guid.Empty || entry.Value is null || string.IsNullOrWhiteSpace(entry.Value.DeviceId) || entry.Value.Channels is null || entry.Value.Channels.Length is < 1 or > 2 || entry.Value.Channels.Any(c => c is < 0 or > 255) || entry.Value.Channels.Distinct().Count() != entry.Value.Channels.Length) throw new ArgumentException("音频 I/O 硬件映射无效。");
+        ValidateHardwareRoutes();
         foreach (var map in InputChannels.Concat(OutputChannels))
             if (map.Key == Guid.Empty || map.Value is null || map.Value.Length is < 1 or > 2 || map.Value.Any(channel => channel is < 0 or > 255) || map.Value.Distinct().Count() != map.Value.Length) throw new ArgumentException("物理声道映射需为 1–2 个不同的零起始声道。");
         foreach (var location in PluginLocations) if (string.IsNullOrWhiteSpace(location.Key) || !Path.IsPathFullyQualified(location.Value)) throw new ArgumentException("本机插件路径无效。");

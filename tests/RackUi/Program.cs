@@ -13,6 +13,7 @@ internal static class Program
             try
             {
                 if (args[0] == "layout") await Rack1407LayoutChecks.RunAsync(directory);
+                else if (args[0] == "io") await RackWorkspaceAudit.RunIoAsync(directory);
                 else if (args[0] == "input") await Rack1408InputChecks.RunAsync(directory);
                 else await RackWorkspaceAudit.RunDesignAsync(directory);
             }

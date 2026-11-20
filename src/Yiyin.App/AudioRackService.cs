@@ -65,9 +65,10 @@ public sealed partial class AudioRackService : IAsyncDisposable
         local.Validate();
         lock (_controlGate)
         {
-            if (Status.IsRunning && (local.DeviceApi != Local.DeviceApi || local.InputDeviceId != Local.InputDeviceId || local.OutputDeviceId != Local.OutputDeviceId || local.SampleRate != Local.SampleRate || local.BufferSize != Local.BufferSize ||
+            if (Status.IsRunning && (!local.UsesSameStreams(Local) || local.InputDeviceId != Local.InputDeviceId ||
                 JsonSerializer.Serialize(local.InputChannels) != JsonSerializer.Serialize(Local.InputChannels) || JsonSerializer.Serialize(local.OutputChannels) != JsonSerializer.Serialize(Local.OutputChannels) ||
-                JsonSerializer.Serialize(local.InputPorts) != JsonSerializer.Serialize(Local.InputPorts) || JsonSerializer.Serialize(local.OutputPorts) != JsonSerializer.Serialize(Local.OutputPorts)))
+                JsonSerializer.Serialize(local.InputPorts) != JsonSerializer.Serialize(Local.InputPorts) || JsonSerializer.Serialize(local.OutputPorts) != JsonSerializer.Serialize(Local.OutputPorts) ||
+                JsonSerializer.Serialize(local.OutputMirrors) != JsonSerializer.Serialize(Local.OutputMirrors)))
                 throw new InvalidOperationException("请先停止机架，再更改音频设备与通道。");
             if (preservePluginScan) PreservePluginScanState(local);
             Local = local;
@@ -138,6 +139,7 @@ public sealed partial class AudioRackService : IAsyncDisposable
             var selected = devices.SingleOrDefault(d => d.Id == Local.OutputDeviceId) ?? throw new IOException("上次的 ASIO 驱动未注册或不可用，请重新选择；不会改用其他驱动。");
             selected = await ProbeDeviceUnderGateAsync("asio", selected.Id).ConfigureAwait(false);
             devices = devices.Select(d => d.Id == selected.Id ? selected : d).ToArray();
+            if (Local.IoMode == "hybrid") devices = [.. devices, .. await EnumerateDevicesAsync("wasapi").ConfigureAwait(false)];
         }
         var configuration = BuildConfiguration(devices);
         _diagnostics.Configuration(Local, devices);
@@ -148,6 +150,11 @@ public sealed partial class AudioRackService : IAsyncDisposable
         Local.Validate(); Project.Validate();
         if (string.IsNullOrWhiteSpace(Local.OutputDeviceId)) throw new InvalidOperationException("请先选择机架声卡和输出通道。");
         var inputs = new Dictionary<string, int>(); var outputs = new Dictionary<string, int>();
+        if (Local.IoMode != "single")
+        {
+            SelectMultiEndpoints(devices, inputs, outputs);
+            return Configuration();
+        }
         void Include(string endpoint, int[] channels, bool input, string name)
         {
             var device = devices.SingleOrDefault(d => d.Id == endpoint) ?? throw new IOException($"“{name}”的声卡端点不可用；不会改用系统默认设备。");
@@ -167,7 +174,7 @@ public sealed partial class AudioRackService : IAsyncDisposable
         foreach (var track in Project.Tracks)
         {
             if (track.Kind is not (RackTrackKind.Output or RackTrackKind.Mono or RackTrackKind.Stereo)) continue;
-            var mapped = HardwareFor(track);
+            var mapped = HardwareFor(track, Local);
             if (mapped.Channels is null || mapped.Channels.Length != track.Channels) throw new IOException($"轨道“{track.Name}”尚未配置 {track.Channels} 个物理通道。");
             Include(mapped.Endpoint, mapped.Channels, track.Kind != RackTrackKind.Output, track.Name);
         }
@@ -185,19 +192,24 @@ public sealed partial class AudioRackService : IAsyncDisposable
         if (chosen.Length > 1 && (chosen.Any(d => string.IsNullOrWhiteSpace(d.GroupId)) || chosen.Select(d => d.GroupId).Distinct(StringComparer.OrdinalIgnoreCase).Count() != 1)) throw new IOException("所有输入输出端点必须来自同一张声卡；设备分组无法确认时不自动混用。");
         if (Local.SampleRate is not (44100 or 48000) || chosen.Any(d => d.PreferredSampleRate != 0 && d.PreferredSampleRate != Local.SampleRate)) throw new IOException("所有声卡端点的当前共享采样率必须一致并为 44100 或 48000 Hz；不会自动重采样物理输入输出。");
         }
-        if (inputs.Count + outputs.Count > 32 || inputs.Values.Sum() > 256 || outputs.Values.Sum() > 256) throw new IOException("机架最多使用 32 个设备流，每方向不超过 256 个通道。");
-        JsonArray Endpoints(Dictionary<string, int> values) => new(values.Select(p => (JsonNode)new JsonObject { ["deviceId"] = p.Key, ["channels"] = p.Value }).ToArray());
-        return new() { ["api"] = Local.DeviceApi, ["inputEndpoints"] = Endpoints(inputs), ["outputEndpoints"] = Endpoints(outputs), ["clockOutputDeviceId"] = Local.OutputDeviceId,
-            ["sampleRate"] = Local.SampleRate, ["bufferFrames"] = Local.BufferSize };
+        return Configuration();
+        JsonObject Configuration()
+        {
+            if (inputs.Count + outputs.Count > 32 || inputs.Values.Sum() > 256 || outputs.Values.Sum() > 256) throw new IOException("机架最多使用 32 个设备流，每方向不超过 256 个通道。");
+            if (Local.IoMode != "single" && inputs.Values.Sum() + outputs.Values.Sum() > 256) throw new IOException("多设备机架的输入和输出合计不能超过 256 个物理通道。");
+            JsonArray Endpoints(Dictionary<string, int> values) => new(values.Select(p => (JsonNode)new JsonObject { ["deviceId"] = p.Key, ["channels"] = p.Value }).ToArray());
+            return new() { ["api"] = Local.DeviceApi, ["ioMode"] = Local.IoMode, ["inputEndpoints"] = Endpoints(inputs), ["outputEndpoints"] = Endpoints(outputs), ["clockOutputDeviceId"] = Local.OutputDeviceId,
+                ["sampleRate"] = Local.SampleRate, ["bufferFrames"] = Local.BufferSize };
+        }
     }
-    private (string Endpoint, int[]? Channels) HardwareFor(RackTrack track)
+    private static (string Endpoint, int[]? Channels) HardwareFor(RackTrack track, RackLocalSettings local)
     {
         if (track.Kind is not (RackTrackKind.Output or RackTrackKind.Mono or RackTrackKind.Stereo)) return ("", null);
         bool output = track.Kind == RackTrackKind.Output;
         var port = output ? track.HardwareOutputPortId : track.InputPortId;
-        if (port is { } id) return (output ? Local.OutputPorts : Local.InputPorts).TryGetValue(id, out var map) ? (map.DeviceId, map.Channels) : ("", null);
-        (output ? Local.OutputChannels : Local.InputChannels).TryGetValue(track.Id, out var channels);
-        return (output ? Local.OutputDeviceId : Local.InputDeviceId, channels);
+        if (port is { } id) return (output ? local.OutputPorts : local.InputPorts).TryGetValue(id, out var map) ? (map.DeviceId, map.Channels) : ("", null);
+        (output ? local.OutputChannels : local.InputChannels).TryGetValue(track.Id, out var channels);
+        return (output ? local.OutputDeviceId : local.InputDeviceId, channels);
     }
     public async Task StartAsync()
     {
@@ -243,6 +255,18 @@ public sealed partial class AudioRackService : IAsyncDisposable
         project.Validate(); local.Validate(); await _graphGate.WaitAsync(_lifetime.Token).ConfigureAwait(false);
         try
         {
+            if (CanApplyHardwareRoutes(project, local))
+            {
+                await SendHardwareRoutesAsync(project, local).ConfigureAwait(false);
+                lock (_controlGate)
+                {
+                    RackProjectEdits.PreserveControls(project, Project); PreservePluginScanState(local);
+                    local.WasRunning = true; Project = project; Local = local;
+                    if (_pendingControls is not null) _pendingControls = project;
+                    _controlVersion++;
+                }
+                Notify(); return;
+            }
             _diagnostics.StopRequested("configuration-change");
             if (_engine is { IsAlive: true })
             {
@@ -322,10 +346,10 @@ public sealed partial class AudioRackService : IAsyncDisposable
                 plugins.Add(new JsonObject { ["instanceId"] = plugin.Id.ToString(), ["format"] = plugin.Identity.Format.ToLowerInvariant(),
                     ["classId"] = plugin.Identity.ClassId, ["path"] = path, ["bypass"] = plugin.Bypass, ["wet"] = plugin.Wet, ["state"] = state });
             }
-            var hardware = HardwareFor(track);
-            nodes.Add(new JsonObject { ["id"] = track.Id.ToString(), ["kind"] = track.Kind switch { RackTrackKind.Mono or RackTrackKind.Stereo => "input", RackTrackKind.Playback => project.PlaybackTrackId == track.Id ? "media" : "bus", RackTrackKind.Output => "output", RackTrackKind.FX => "fx", _ => "bus" },
-                ["channels"] = track.Channels, ["endpointId"] = hardware.Endpoint, ["deviceChannels"] = JsonSerializer.SerializeToNode(hardware.Channels ?? Enumerable.Range(0, track.Channels).ToArray()),
-                ["gain"] = Gain(track.GainDb), ["pan"] = track.Pan, ["mute"] = solo.IsMuted(track), ["monitor"] = track.Monitor, ["plugins"] = plugins });
+            var node = RoutingNode(project, track, Local);
+            node["gain"] = Gain(track.GainDb); node["pan"] = track.Pan; node["mute"] = solo.IsMuted(track);
+            node["monitor"] = track.Monitor; node["plugins"] = plugins;
+            nodes.Add(node);
             void Edge(string id, Guid target, string source, double gain) => edges.Add(new JsonObject { ["id"] = id, ["from"] = track.Id.ToString(), ["to"] = target.ToString(), ["source"] = source, ["gain"] = gain,
                 ["fromChannel"] = 0, ["toChannel"] = 0, ["channels"] = Math.Min(track.Channels, project.FindTrack(target)!.Channels) });
             if (track.OutputTrackId is { } output) Edge(track.Id + ":main", output, "post", track.MainOutputEnabled ? Gain(track.MainOutputGainDb) : 0);
@@ -483,7 +507,8 @@ public sealed partial class AudioRackService : IAsyncDisposable
                                 pluginLatency[trackId] = frames * 1000 / sampleRate;
                     Status = Status with { IsRunning = Flag(s, "running"), Api = Text(s, "api", Local.DeviceApi), DriverResetRequired = Flag(s, "driverResetRequired"), CpuPercent = Number(s, "cpuPercent"),
                         LatencyMilliseconds = Number(s, "deviceLatencyFrames") * 1000 / Math.Max(1, Number(s, "sampleRate", Local.SampleRate)), Meters = meters,
-                        ActualSampleRate = (int)Number(s, "sampleRate"), ActualBufferFrames = (int)Number(s, "bufferFrames"), PluginLatencyMilliseconds = pluginLatency, OutputSignal = ParseOutputSignal(s) };
+                        ActualSampleRate = (int)Number(s, "sampleRate"), ActualBufferFrames = (int)Number(s, "bufferFrames"), PluginLatencyMilliseconds = pluginLatency,
+                        OutputSignal = ParseOutputSignal(s), Endpoints = ParseEndpoints(s) };
                     if (!string.IsNullOrWhiteSpace(Text(s, "error")))
                         Status = Status with { Message = Text(s, "error") };
                     else if (Flag(s, "restartRequired"))

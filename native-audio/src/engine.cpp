@@ -150,7 +150,6 @@ struct Node {
   struct GainHistory { float left = 1, right = 1; };
   std::shared_ptr<GainHistory> gainHistory = std::make_shared<GainHistory>();
   bool mute = false, monitor = true;
-  std::vector<int> deviceChannels;
   float desiredGain = 1, desiredPan = 0;
   bool desiredMute = false, desiredMonitor = true;
   std::vector<Insert> inserts;
@@ -169,6 +168,20 @@ struct Edge {
   Delay delay;
 };
 struct Graph {
+  using ChannelRoutes = std::array<std::vector<int>, 2>;
+  using HardwareRoutes = std::vector<ChannelRoutes>;
+  std::unique_ptr<HardwareRoutes> routes = std::make_unique<HardwareRoutes>();
+  std::atomic<const HardwareRoutes *> activeRoutes{nullptr};
+  static ChannelRoutes readRoutes(const Json &node, int width) {
+    if (node.contains("flatRoutes")) return node.at("flatRoutes").get<ChannelRoutes>();
+    auto channels = node.value("deviceChannels", std::vector<int>{0, 1});
+    if (channels.size() < (size_t)width) throw std::runtime_error("Missing channel mapping");
+    for (int c : channels)
+      if (c < 0 || c >= 256) throw std::runtime_error("Invalid physical channel");
+    ChannelRoutes result;
+    for (int c = 0; c < width; ++c) result[c].push_back(channels[c]);
+    return result;
+  }
   std::vector<Node> nodes;
   std::vector<Edge> edges;
   std::vector<int> order;
@@ -214,12 +227,7 @@ struct Graph {
         if (old.id == a.id && old.channels == a.channels && old.kind == a.kind &&
             old.desiredGain == a.desiredGain && old.desiredPan == a.desiredPan && old.desiredMute == a.desiredMute)
           a.gainHistory = old.gainHistory;
-      a.deviceChannels = n.value("deviceChannels", std::vector<int>{0, 1});
-      if (a.deviceChannels.size() < (size_t)a.channels)
-        throw std::runtime_error("Missing channel mapping");
-      for (auto c : a.deviceChannels)
-        if (c < 0 || c >= 256)
-          throw std::runtime_error("Invalid physical channel");
+      routes->push_back(readRoutes(n, a.channels));
       for (int c = 0; c < 2; ++c) {
         a.pre[c].resize(bs);
         a.post[c].resize(bs);
@@ -251,6 +259,7 @@ struct Graph {
       ids[a.id] = (int)nodes.size();
       nodes.push_back(std::move(a));
     }
+    activeRoutes.store(routes.get());
     for (auto &e : j.value("edges", Json::array())) {
       Edge a;
       a.id = e.value("id", std::string("legacy-") + std::to_string(edges.size()));
@@ -308,7 +317,8 @@ struct Graph {
     // Topological induction avoids recursive signature expansion in dense DAGs.
     for (int i : order) for (int k = 0; k < (int)old.nodes.size(); ++k) {
       auto &n = nodes[i]; const auto &p = old.nodes[k];
-      if (n.id != p.id || n.kind != p.kind || n.channels != p.channels || n.deviceChannels != p.deviceChannels) continue;
+      if (n.id != p.id || n.kind != p.kind || n.channels != p.channels ||
+          (n.kind == "input" && (*routes)[i] != (*old.routes)[k])) continue;
       bool inputsSame = true; int count = 0, oldCount = 0;
       for (const auto &e : edges) if (e.to == i) {
         ++count;
@@ -449,6 +459,7 @@ struct Graph {
   void process(const float *input, float *output, int n, int inputChannels, int outputChannels,
                Media &media, uint64_t position) {
     applyControls();
+    const auto &hardware = *activeRoutes.load();
     std::fill_n(output, (size_t)n * outputChannels, 0.f);
     for (auto &a : nodes)
       for (int c = 0; c < 2; ++c)
@@ -465,9 +476,9 @@ struct Graph {
       auto &a = nodes[ix];
       if (a.kind == "input" && a.monitor && input)
         for (int c = 0; c < a.channels; ++c)
-          if (a.deviceChannels[c] < inputChannels)
+          for (int channel : hardware[ix][c]) if (channel < inputChannels)
             for (int s = 0; s < n; ++s)
-              a.pre[c][s] += input[(size_t)s * inputChannels + a.deviceChannels[c]];
+              a.pre[c][s] += input[(size_t)s * inputChannels + channel];
       if (a.kind == "media")
         for (int c = 0; c < a.channels; ++c)
           for (int s = 0; s < n; ++s)
@@ -505,12 +516,12 @@ struct Graph {
                        squares[0], a.channels > 1 ? squares[1] : squares[0], n);
       if (a.kind == "output")
         for (int c = 0; c < a.channels; ++c)
-          if (a.deviceChannels[c] < outputChannels)
-            for (int s = 0; s < n; ++s)
-            {
-              auto delayed = a.outputDelay.step(a.post[c][s], c, s);
-              if (!a.mute) output[(size_t)s * outputChannels + a.deviceChannels[c]] += delayed;
-            }
+          for (int s = 0; s < n; ++s) {
+            const float delayed = a.outputDelay.step(a.post[c][s], c, s);
+            if (!a.mute)
+              for (int channel : hardware[ix][c]) if (channel < outputChannels)
+                output[(size_t)s * outputChannels + channel] += delayed;
+          }
       a.outputDelay.advance(n);
       for (auto &e : edges)
         if (e.from == ix) {
@@ -546,6 +557,7 @@ class Engine {
   bool editCandidateEndpointsReady = true;
   std::string editCandidateHardwareIssue;
   std::vector<std::unique_ptr<Graph>> retired;
+  std::vector<std::unique_ptr<Graph::HardwareRoutes>> retiredRoutes;
   std::atomic<Graph *> activeGraph{nullptr};
   Json config = Json::object();
   Media media;
@@ -648,37 +660,61 @@ class Engine {
     validateDeviceGroup(device().getDeviceInfo(input).groupId,
                         device().getDeviceInfo(output).groupId);
   }
-  std::vector<EndpointSpec> prepareEndpoints(const Json &j, unsigned expectedRate) {
+  std::vector<EndpointSpec> prepareEndpoints(const Json &j, unsigned rate, const Json *asioInfo = nullptr) {
     const auto inputs = j.value("inputEndpoints", Json::array());
     const auto outputs = j.value("outputEndpoints", Json::array());
-    if (!inputs.is_array() || !outputs.is_array() || outputs.empty() ||
-        inputs.size() + outputs.size() > 32)
-      throw std::runtime_error("Select 1 to 32 WASAPI endpoints including an output clock");
-    auto clock = j.value("clockOutputDeviceId", outputs.front().at("deviceId").get<std::string>());
+    if (!inputs.is_array() || !outputs.is_array() || outputs.empty() || inputs.size() + outputs.size() > 32)
+      throw std::runtime_error("Select 1 to 32 endpoints including an output clock");
+    const auto mode = j.value("ioMode", "single");
+    const auto clock = j.value("clockOutputDeviceId", outputs.front().at("deviceId").get<std::string>());
+    if (asioInfo && (asioInfo->at("stableId") != clock ||
+        (mode == "single" && (inputs.size() > 1 || outputs.size() != 1))))
+      throw std::runtime_error("Single ASIO uses one selected driver with one output clock");
     std::vector<EndpointSpec> specs;
-    std::set<std::string> ids;
+    std::set<std::pair<bool, std::string>> selected;
     std::string group;
     bool clockFound = false;
     unsigned total = 0;
-    for (int direction = 0; direction < 2; ++direction) {
+    for (bool input : {true, false}) {
       unsigned offset = 0;
-      const auto &list = direction == 0 ? inputs : outputs;
-      for (auto &p : list) {
-        auto key = p.at("deviceId").get<std::string>();
+      for (auto &p : input ? inputs : outputs) {
+        auto id = p.at("deviceId").get<std::string>();
         int channels = p.at("channels").get<int>();
-        if (key.empty() || !ids.insert(key).second || channels < 1 || channels > 256)
+        bool primary = !input && id == clock;
+        if (id.empty() || channels < 1 || channels > 256 || !selected.emplace(input, id).second)
           throw std::runtime_error("Invalid or duplicate endpoint/channel selection");
-        Json selector{{direction == 0 ? "inputDeviceId" : "outputDeviceId", key}};
-        auto runtime = resolve(selector, direction == 0 ? "inputDeviceId" : "outputDeviceId",
-                               direction == 0, expectedRate);
-        auto info = device().getDeviceInfo(runtime);
-        if ((unsigned)channels > (direction == 0 ? info.inputChannels : info.outputChannels))
-          throw std::runtime_error("Selected channels exceed the actual endpoint channel count");
-        if (group.empty()) group = info.groupId;
-        validateDeviceGroup(group, info.groupId);
-        bool primary = direction == 1 && key == clock;
+        EndpointSpec spec{id, "", (unsigned)channels, offset, input, primary};
+        if (asioInfo && id == clock) {
+          spec.asio = true;
+          spec.groupId = clock;
+          spec.nativeRate = rate;
+          if (channels > asioInfo->at(input ? "inputChannels" : "outputChannels").get<int>())
+            throw std::runtime_error("ASIO channel selection exceeds driver bounds");
+        } else {
+          if (id.starts_with("asio:") || (asioInfo && mode == "single"))
+            throw std::runtime_error("Only the selected ASIO clock driver is supported");
+          bool found = false;
+          for (auto runtime : device().getDeviceIds()) {
+            auto info = device().getDeviceInfo(runtime);
+            if (info.stableId != id) continue;
+            found = true;
+            if ((unsigned)channels > (input ? info.inputChannels : info.outputChannels))
+              throw std::runtime_error("Selected channels exceed the actual endpoint channel count");
+            if (!info.preferredSampleRate || ((primary || mode == "single") && info.preferredSampleRate != rate))
+              throw std::runtime_error("Clock or single-device rate must match endpoint Windows mix format");
+            spec.groupId = info.groupId;
+            spec.nativeRate = info.preferredSampleRate;
+            if (mode == "single") {
+              if (group.empty()) group = spec.groupId;
+              validateDeviceGroup(group, spec.groupId);
+            }
+            break;
+          }
+          if (!found && (primary || mode == "single"))
+            throw std::runtime_error("Configured WASAPI endpoint unavailable");
+        }
+        specs.push_back(std::move(spec));
         clockFound |= primary;
-        specs.push_back({key, info.groupId, (unsigned)channels, offset, direction == 0, primary});
         offset += channels; total += channels;
       }
     }
@@ -686,39 +722,50 @@ class Engine {
     if (total > 256) throw std::runtime_error("At most 256 configured endpoint channels in total");
     return specs;
   }
-#ifdef YIDECK_ENABLE_ASIO
-  static std::vector<EndpointSpec> prepareAsioEndpoints(const Json &j, const Json &info) {
-    auto ins = j.value("inputEndpoints", Json::array());
-    auto outs = j.value("outputEndpoints", Json::array());
-    if (!ins.is_array() || !outs.is_array() || ins.size() > 1 || outs.size() != 1)
-      throw std::runtime_error("ASIO uses one selected driver with one output endpoint and optional duplex input");
-    auto id = info.at("stableId").get<std::string>();
-    if (j.value("clockOutputDeviceId", id) != id)
-      throw std::runtime_error("ASIO output clock must be the selected driver");
-    std::vector<EndpointSpec> result;
-    for (int direction = 0; direction < 2; ++direction)
-      for (auto &p : direction ? outs : ins) {
-        int n = p.at("channels");
-        if (p.at("deviceId") != id || n < 1 || n > info.at(direction ? "outputChannels" : "inputChannels").get<int>())
-          throw std::runtime_error("ASIO requires a single driver with valid physical channel bounds; no cross-API aggregation");
-        result.push_back({id, id, (unsigned)n, 0, direction == 0, direction == 1});
-      }
-    return result;
-  }
-#endif
   Json endpointLayout() const {
     Json result = Json::array();
     for (auto &p : endpointSpecs)
       result.push_back({{"deviceId", p.deviceId}, {"input", p.input}, {"channels", p.channels},
-                        {"channelOffset", p.offset}, {"clock", p.clock}});
+                        {"channelOffset", p.offset}, {"clock", p.clock}, {"sampleRate", p.nativeRate}});
     return result;
   }
   Json mapGraphEndpoints(Json definition, bool &hardwareReady, std::string &hardwareIssue) const {
     hardwareReady = true;
     hardwareIssue.clear();
     for (auto &n : definition.at("nodes")) {
+      n.erase("flatRoutes");
       auto kind = n.at("kind").get<std::string>();
       if (kind != "input" && kind != "output") continue;
+      if (n.contains("hardwareRoutes")) {
+        const auto width = n.at("channels").get<int>();
+        const auto &targets = n.at("hardwareRoutes");
+        if (width < 1 || width > 2 || !targets.is_array() || targets.size() > 512 ||
+            (kind == "input" && targets.size() > 1))
+          throw std::runtime_error("Invalid hardware route matrix");
+        Graph::ChannelRoutes flat;
+        for (const auto &target : targets) {
+          const auto id = target.at("endpointId").get<std::string>();
+          const auto channels = target.at("deviceChannels").get<std::vector<int>>();
+          if (id.empty() || channels.size() != (size_t)width)
+            throw std::runtime_error("Invalid endpoint or route width");
+          const auto endpoint = std::find_if(endpointSpecs.begin(), endpointSpecs.end(), [&](const auto &spec) {
+            return spec.deviceId == id && spec.input == (kind == "input");
+          });
+          for (int c = 0; c < width; ++c) {
+            if (channels[c] < -1 || channels[c] >= 256) throw std::runtime_error("Invalid physical channel");
+            if (channels[c] == -1 || endpoint == endpointSpecs.end()) continue;
+            if (channels[c] >= (int)endpoint->channels) {
+              if (running) throw std::runtime_error("Graph channel exceeds its selected endpoint range");
+              hardwareReady = false; hardwareIssue = "channel-range"; continue;
+            }
+            int channel = endpoint->offset + channels[c];
+            if (std::find(flat[c].begin(), flat[c].end(), channel) == flat[c].end())
+              flat[c].push_back(channel);
+          }
+        }
+        n["flatRoutes"] = flat;
+        continue;
+      }
       auto id = n.contains("endpointId") && n["endpointId"].is_string()
                     ? n["endpointId"].get<std::string>() : "";
       if (id.empty()) {
@@ -776,7 +823,7 @@ public:
     auto op = j.at("op").get<std::string>();
     if (op == "ping")
       return {{"protocol", 1},
-              {"version", "1.1.0"},
+              {"version", "1.2.0"},
               {"capabilities",
                {{"wasapi", true},
 #ifdef YIDECK_ENABLE_ASIO
@@ -794,7 +841,14 @@ public:
                 {"internalFloat32", true},
                 {"outputSignalObservation", true},
                 {"liveInsertAndSendControls", true},
-                {"sameDeviceMultiEndpoint", true}}}};
+                {"sameDeviceMultiEndpoint", true}, {"independentWasapiEndpoints", true},
+                {"asioWasapiHybrid",
+#ifdef YIDECK_ENABLE_ASIO
+                 true
+#else
+                 false
+#endif
+                }}}};
     if (op == "devices") {
       Json ds = Json::array();
       if (j.value("api", "wasapi") == "asio") {
@@ -853,25 +907,32 @@ public:
 #ifndef YIDECK_ENABLE_ASIO
       if (useAsio) throw std::runtime_error("ASIO is disabled in this build");
 #endif
+      const auto mode = j.value("ioMode", "single");
+      if (mode != "single" && mode != (useAsio ? "hybrid" : "multi"))
+        throw std::runtime_error("Incompatible audio API and ioMode");
+      const bool multiple = j.contains("inputEndpoints") || j.contains("outputEndpoints");
+      if (mode != "single" && (!multiple || !j.contains("clockOutputDeviceId")))
+        throw std::runtime_error("Independent devices require an explicit output clock and endpoint selection");
       int ni = j.value("inputChannels", 0), no = j.value("outputChannels", 2),
           nb = j.value("bufferFrames", 256);
       double nr = j.value("sampleRate", 48000.0);
-      if (ni < 0 || ni > 64 || no < 1 || no > 64 || nb < (useAsio ? 8 : 16) || nb > MaxBlock ||
+      if (((mode == "single" || !multiple) && (ni < 0 || ni > 64 || no < 1 || no > 64)) || nb < (useAsio ? 8 : 16) || nb > MaxBlock ||
           (nr != 48000 && nr != 44100))
         throw std::runtime_error("Invalid audio format; supported rates are 44100 and 48000 Hz");
       if (graph && (nb != block || nr != rate))
         throw std::runtime_error("Clear graph before changing block format");
-      const bool multiple = j.contains("inputEndpoints") || j.contains("outputEndpoints");
       std::vector<EndpointSpec> specs;
 #ifdef YIDECK_ENABLE_ASIO
       std::unique_ptr<yideck_asio::Backend> nextAsio;
       if (useAsio) {
-        if (!multiple || !j.contains("outputEndpoints") || !j["outputEndpoints"].is_array() || j["outputEndpoints"].size() != 1)
-          throw std::runtime_error("ASIO requires one explicit outputEndpoints entry");
-        if (asio) { asio->close(); asio.reset(); }
-        nextAsio = std::make_unique<yideck_asio::Backend>(j["outputEndpoints"][0].at("deviceId"));
+        const auto outputs = j.value("outputEndpoints", Json::array());
+        if (!outputs.is_array() || outputs.empty())
+          throw std::runtime_error("ASIO requires an explicit clock output endpoint");
+        const auto clock = j.value("clockOutputDeviceId", outputs.front().at("deviceId").get<std::string>());
+        if (asio && asio->loaded()) asio->releaseHardware();
+        nextAsio = std::make_unique<yideck_asio::Backend>(clock);
         auto &d = nextAsio->description();
-        specs = prepareAsioEndpoints(j, d);
+        specs = prepareEndpoints(j, (unsigned)nr, &d);
         if (std::find(d["sampleRates"].begin(), d["sampleRates"].end(), (int)nr) == d["sampleRates"].end())
           throw std::runtime_error("ASIO selected sample rate is unsupported");
         if (!yideck_asio::validBuffer(nb,d["bufferMinFrames"],d["bufferMaxFrames"],d["bufferGranularity"]))
@@ -903,7 +964,7 @@ public:
       config = j;
       outputSignal.reset();
       error.clear();
-      return {{"sampleRate", rate}, {"bufferFrames", block}, {"configured", true},
+      return {{"sampleRate", rate}, {"bufferFrames", block}, {"configured", true}, {"ioMode", mode},
               {"inputChannels", inCh}, {"outputChannels", outCh},
               {"endpoints", endpointLayout()}};
     }
@@ -927,6 +988,32 @@ public:
       pendingGraphEdit = 0;
       return {{"committed", op == "commitGraphEdit"}, {"hardwareReady", graph && graphEndpointsReady},
               {"hardwareIssue", graph ? graphHardwareIssue : ""}};
+    }
+    if (op == "setHardwareRoutes") {
+      if (!graph || pendingGraphEdit) throw std::runtime_error("Hardware routes require an active graph");
+      bool ready; std::string issue;
+      const auto mapped = mapGraphEndpoints(j, ready, issue);
+      auto routes = std::make_unique<Graph::HardwareRoutes>(*graph->routes);
+      std::set<std::string> seen;
+      for (const auto &n : mapped.at("nodes")) {
+        auto id = n.at("id").get<std::string>();
+        auto it = std::find_if(graph->nodes.begin(), graph->nodes.end(), [&](const Node &node) { return node.id == id; });
+        if (it == graph->nodes.end() || (it->kind != "output" && it->kind != "input") ||
+            n.at("kind") != it->kind || n.at("channels") != it->channels || !seen.insert(id).second)
+          throw std::runtime_error("Hardware route does not match current graph");
+        (*routes)[it - graph->nodes.begin()] = Graph::readRoutes(n, it->channels);
+      }
+      if (seen.size() != std::count_if(graph->nodes.begin(), graph->nodes.end(), [](const Node &n) {
+            return n.kind == "input" || n.kind == "output";
+          })) throw std::runtime_error("Hardware matrix must include every physical track");
+      // The callback takes one immutable table at block entry. Old tables are
+      // released by the control thread only after all earlier callbacks exit.
+      retiredRoutes.push_back(std::move(graph->routes));
+      graph->routes = std::move(routes);
+      graph->activeRoutes.store(graph->routes.get());
+      if (!inFlight.load()) retiredRoutes.clear();
+      graphEndpointsReady = ready; graphHardwareIssue = issue;
+      return {{"hardwareReady", ready}, {"hardwareIssue", issue}};
     }
     if (op == "setGraph" || op == "beginGraphEdit") {
       if (pendingGraphEdit) throw std::runtime_error("Finish pending graph edit first");
@@ -979,28 +1066,40 @@ public:
         return {{"running", true}};
 #ifdef YIDECK_ENABLE_ASIO
       if (asioMode()) {
+        const bool hybrid = config.value("ioMode", "single") == "hybrid";
+        const auto clock = std::find_if(endpointSpecs.begin(), endpointSpecs.end(), [](const auto &s) { return s.clock; });
         if (!asio) throw std::runtime_error("Reconfigure the selected ASIO driver before starting");
         if (asio->restartRequired()) throw std::runtime_error("ASIO driver requested reset; stop and reconfigure before starting");
-        if (!asio->loaded()) asio=std::make_unique<yideck_asio::Backend>(config["outputEndpoints"][0].at("deviceId"));
+        if (!asio->loaded()) asio=std::make_unique<yideck_asio::Backend>(clock->deviceId);
         try {
           asio->close();
-          asio->open(inCh,outCh,block,rate,endpointCallback,this);
+          if (hybrid) {
+            bridge = std::make_unique<EndpointBridge>();
+            bridge->open(endpointSpecs, (unsigned)rate, block, endpointCallback, this, true);
+            asio->open(bridge->asioInputs(), bridge->asioOutputs(), block, rate,
+                       EndpointBridge::asioClock, bridge.get());
+            bridge->start();
+          } else {
+            asio->open(inCh,outCh,block,rate,endpointCallback,this);
+          }
           deviceLatency=asio->latency();media.latency=deviceLatency.load()+graph->latency;
           asio->start();running=true;error.clear();
         } catch (...) {
           asio->releaseHardware();
+          if (bridge) bridge->stop();
           throw;
         }
         return {{"running",true},{"api","asio"},{"bufferFrames",block},{"sampleRate",rate},
-          {"deviceLatencyFrames",deviceLatency.load()},{"bridgeBufferFrames",0},{"endpoints",endpointLayout()}};
+          {"deviceLatencyFrames",deviceLatency.load()},{"bridgeBufferFrames",bridge ? bridge->buffering() : 0},{"endpoints",endpointLayout()}};
       }
 #endif
       if (!endpointSpecs.empty()) {
         // Re-enumerate immediately before opening: a stale dialog must not hide a
         // Windows mix-rate, channel-layout, container or device change.
-        auto current = prepareEndpoints(config, (unsigned)rate);
+        const bool adaptive = config.value("ioMode", "single") == "multi";
+        auto current = adaptive ? endpointSpecs : prepareEndpoints(config, (unsigned)rate);
         bridge = std::make_unique<EndpointBridge>();
-        bridge->open(current, (unsigned)rate, block, endpointCallback, this);
+        bridge->open(current, (unsigned)rate, block, endpointCallback, this, adaptive);
         bridge->start();
         deviceLatency = bridge->latency();
         media.latency = deviceLatency.load() + graph->latency;
@@ -1170,20 +1269,26 @@ public:
       auto consumed = media.consumed.load();
       auto latency = media.latency.load();
       Json endpoints = Json::array();
-      uint64_t totalCallbackNanos = bridge ? 0 : callbackNanos.load();
-      uint64_t totalXruns = bridge ? 0 : xruns.load();
-      uint64_t totalDeadlineMisses = bridge ? 0 : deadlineMisses.load();
-      uint64_t maximumCallbackNanos = bridge ? 0 : maxCallbackNanos.load();
+      const bool backendTiming = bridge || asioMode();
+      uint64_t totalCallbackNanos = backendTiming ? 0 : callbackNanos.load();
+      uint64_t totalXruns = backendTiming ? 0 : xruns.load();
+      uint64_t totalDeadlineMisses = backendTiming ? 0 : deadlineMisses.load();
+      uint64_t maximumCallbackNanos = backendTiming ? 0 : maxCallbackNanos.load();
       if (bridge) for (auto &p : bridge->endpoints())
       {
+        const unsigned deviceRate = p->spec.nativeRate ? p->spec.nativeRate : (unsigned)rate;
+        const auto queuedDeviceFrames = uint64_t(p->deviceQueue.load() * rate / deviceRate);
+        const auto portError = p->fault.load();
         totalCallbackNanos += p->callbackNanos.load(); totalXruns += p->xruns.load();
         totalDeadlineMisses += p->deadlineMisses.load();
         maximumCallbackNanos = std::max(maximumCallbackNanos, p->maxCallbackNanos.load());
         endpoints.push_back({{"deviceId", p->spec.deviceId}, {"input", p->spec.input},
-          {"channels", p->spec.channels}, {"clock", p->spec.clock},
+          {"channels", p->spec.channels}, {"clock", p->spec.clock}, {"sampleRate", p->spec.nativeRate},
+          {"muted", portError != 0}, {"error", EndpointBridge::faultLabel(portError)},
+          {"driftPpm", p->ring.driftPpm.load()},
           {"callbackCount", p->callbacks.load()}, {"frames", p->frames.load()},
           {"bridgeQueuedFrames", p->ring.available()}, {"deviceQueueFrames", p->deviceQueue.load()},
-          {"outputLatencyFrames", p->spec.input ? Json(nullptr) : Json(p->ring.available() + p->deviceQueue.load() + (graph ? graph->latency : 0))},
+          {"outputLatencyFrames", p->spec.input ? Json(nullptr) : Json(p->ring.available() + queuedDeviceFrames + (graph ? graph->latency : 0))},
           {"bridgeUnderflows", p->underflows.load()}, {"bridgeOverflows", p->overflows.load()},
           {"warmupCallbacks", p->warmupCallbacks.load()}, {"xruns", p->xruns.load()},
           {"maxCallbackMs", p->maxCallbackNanos.load() / 1e6},
@@ -1195,9 +1300,14 @@ public:
       if (asioMode() && asio) {
         asioStatus=asio->status();driverRestart=asio->restartRequired();
         totalXruns += asioStatus["xruns"].get<uint64_t>();
-        totalCallbackNanos = asioStatus["callbackTotalNanoseconds"].get<uint64_t>();
-        maximumCallbackNanos = (uint64_t)(asioStatus["maxCallbackMs"].get<double>()*1e6);
-        totalDeadlineMisses = asioStatus["callbackDeadlineMisses"].get<uint64_t>();
+        totalCallbackNanos += asioStatus["callbackTotalNanoseconds"].get<uint64_t>();
+        maximumCallbackNanos = std::max(maximumCallbackNanos, (uint64_t)(asioStatus["maxCallbackMs"].get<double>()*1e6));
+        totalDeadlineMisses += asioStatus["callbackDeadlineMisses"].get<uint64_t>();
+        if (bridge) for (const auto &p : endpointSpecs) if (p.asio)
+          endpoints.push_back({{"deviceId", p.deviceId}, {"input", p.input}, {"channels", p.channels},
+            {"clock", p.clock}, {"sampleRate", rate}, {"muted", driverRestart},
+            {"error", driverRestart ? "ASIO clock stopped" : ""}, {"driftPpm", 0},
+            {"callbackCount", asioStatus["callbackCount"]}, {"xruns", asioStatus["xruns"]}});
       }
 #endif
       auto streamError = bridge && bridge->failure() ? bridge->failureMessage() : error;
@@ -1205,7 +1315,7 @@ public:
       for (auto &p : endpointSpecs) if (p.clock) clockOutput = p.deviceId;
       return {
           {"running", running && nativeRunning()},
-          {"api", config.value("api", "wasapi")},
+          {"api", config.value("api", "wasapi")}, {"ioMode", config.value("ioMode", "single")},
           {"asio", asioStatus},
           {"driverResetRequired", driverRestart},
           {"hardwareReady", graph && graphEndpointsReady},
@@ -1268,8 +1378,10 @@ public:
                                : "An essential WASAPI endpoint stopped; all rack outputs stopped.";
       stop();
     }
-    if (!inFlight.load())
+    if (!inFlight.load()) {
       retired.clear();
+      retiredRoutes.clear();
+    }
     if (graph)
       for (auto &n : graph->nodes)
         for (auto &p : n.inserts) {

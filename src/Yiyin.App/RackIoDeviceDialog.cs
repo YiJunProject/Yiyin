@@ -18,12 +18,15 @@ internal sealed partial class RackDeviceDialog : DeckDialog
     private readonly Button _probe = new() { Content = "探测所选驱动" }, _panel = new() { Content = "驱动控制面板" };
     private Button _apply = null!, _cancel = null!;
     private readonly Grid _matrix = new();
-    private readonly ComboBox _playerTarget = new();
     private readonly TextBlock _summary = new() { TextWrapping = TextWrapping.Wrap };
     private readonly TextBlock _actual = new() { TextWrapping = TextWrapping.Wrap };
     private readonly TextBlock _impact = new() { TextWrapping = TextWrapping.Wrap };
-    private readonly CheckBox _player = new() { Content = "音视频播放器接入机架" };
-    private readonly Button _inputTab = new() { Content = "输入" }, _outputTab = new() { Content = "输出" };
+    private readonly ComboBox _clock = new();
+    private readonly WrapPanel _groups = new(), _modes = new();
+    private FrameworkElement _singleFields = null!, _multiFields = null!;
+    private readonly HashSet<string> _selectedIds = new(StringComparer.Ordinal);
+    private string _mode;
+    private bool Multi => _mode != "single";
     private bool _input = true, _busy, _updating, _closed;
     private string _activeApi;
     private string _operationLabel = "正在读取驱动信息…";
@@ -35,42 +38,45 @@ internal sealed partial class RackDeviceDialog : DeckDialog
     private static string CardKey(RackUiDevice device) => device.GroupId.Length > 0 ? device.GroupId : "endpoint:" + device.Id;
 
     public RackDeviceDialog(Window owner, DeckTheme theme, IRackUiHost host, IReadOnlyList<RackUiDevice> devices)
-        : base(owner, theme, "音频 I/O · 声卡与声音去向", "按 1 声卡 → 2 通道映射配置。通道与去向在应用后生效；驱动探测和控制面板单独执行。", 1100)
+        : base(owner, theme, "易音 1.2.0 Windows 独立音频机架 · 音频 I/O", "", 1100)
     {
         _host = host; _guard = new(host); _devices = devices.ToList(); _project = host.Project.Copy(); _local = RackWorkspaceControl.CopyLocal(host.Local); _activeApi = RackLocalSettings.NormalizeDeviceApi(_local.DeviceApi);
         RackIoMigration.Upgrade(_project, _local);
         Width = Math.Min(1480, SystemParameters.WorkArea.Width - 60); MinWidth = 920; ResizeMode = ResizeMode.CanResizeWithGrip;
-        Section("1  声卡与驱动参数");
-        var deviceRow = new Grid(); deviceRow.ColumnDefinitions.Add(new() { Width = new GridLength(130) }); deviceRow.ColumnDefinitions.Add(new()); deviceRow.ColumnDefinitions.Add(new() { Width = new GridLength(130) }); deviceRow.ColumnDefinitions.Add(new() { Width = new GridLength(130) });
-        _api.ItemsSource = new[] { new ApiChoice("wasapi", "WASAPI"), new ApiChoice("asio", "ASIO") }; _api.DisplayMemberPath = nameof(ApiChoice.Name); _api.SelectedValuePath = nameof(ApiChoice.Id); _api.SelectedValue = _activeApi; AutomationProperties.SetAutomationId(_api, "rack-device-api");
-        SetCards(); AutomationProperties.SetAutomationId(_card, "rack-device-card");
-        AutomationProperties.SetAutomationId(_rate, "rack-device-rate"); AutomationProperties.SetAutomationId(_buffer, "rack-device-buffer");
-        void Field(int column, string label, FrameworkElement value) { var box = new StackPanel { Margin = new Thickness(column == 0 ? 0 : 10, 0, 0, 0) }; box.Children.Add(Label(label)); box.Children.Add(value); Grid.SetColumn(box, column); deviceRow.Children.Add(box); }
-        Field(0, "音频驱动", _api); Field(1, "音频设备 · 物理声卡", _card); Field(2, "采样率 Hz", _rate); Field(3, "请求缓冲帧数", _buffer); Body.Children.Add(deviceRow);
+        _mode = _local.IoMode; _selectedIds.UnionWith(_local.SelectedEndpointIds);
+        BuildDeviceControls();
         var driverActions = new WrapPanel { Margin = new Thickness(0, 10, 0, 0) }; foreach (var b in new[] { _probe, _panel }) { b.Margin = new Thickness(0, 0, 8, 0); driverActions.Children.Add(b); } Body.Children.Add(driverActions);
         AutomationProperties.SetAutomationId(_probe, "rack-device-probe"); AutomationProperties.SetAutomationId(_panel, "rack-device-control-panel"); _probe.Click += (_, _) => _ = ProbeAsync(); _panel.Click += (_, _) => _ = OpenPanelAsync();
         _summary.Foreground = DeckTheme.Brush(theme.Muted); _summary.Margin = new Thickness(0, 10, 0, 10); AutomationProperties.SetAutomationId(_summary, "rack-device-card-hint"); Body.Children.Add(_summary);
-        Section("2  命名通道 → 硬件通道");
+        
         _matrix.ColumnDefinitions.Add(new()); _matrix.ColumnDefinitions.Add(new()); Body.Children.Add(_matrix);
         _actual.Foreground = DeckTheme.Brush(theme.Muted); _actual.Margin = new Thickness(0, 8, 0, 0); AutomationProperties.SetAutomationId(_actual, "rack-device-actual"); Body.Children.Add(_actual);
         _impact.Margin = new Thickness(0, 8, 0, 0); _impact.Foreground = DeckTheme.Brush(theme.Text); AutomationProperties.SetAutomationId(_impact, "rack-device-apply-impact"); Body.Children.Add(_impact);
         _api.SelectionChanged += (_, _) => { if (!_updating && _api.SelectedValue is string api && api != _activeApi) _ = LoadApiAsync(api); };
         _card.SelectionChanged += (_, _) => { if (!_updating) { ClearError(); UpdateRates(true); Render(); } }; UpdateRates(); Render();
-        _rate.SelectionChanged += (_, _) => ClearError(); _buffer.SelectionChanged += (_, _) => ClearError();
-        _cancel = AddButton("取消", Close);
-        _apply = AddButton("应用 I/O 与轨道", async () => await ApplyAsync(), true, "rack-device-save");
-        Closing += (_, e) => { if (_busy) e.Cancel = true; };
+        _rate.SelectionChanged += (_, _) => { ClearError(); ReconcileStreamSelection(); }; _buffer.SelectionChanged += (_, _) => { ClearError(); ReconcileStreamSelection(); };
+        _cancel = AddButton("关闭", Close, id: "rack-device-close");
+        _apply = AddButton("保存配置", async () => await ApplyAsync(), true, "rack-device-save");
+        Closing += OnDialogClosing;
         _host.Changed += HostChanged; Closed += (_, _) => { _closed = true; _host.Changed -= HostChanged; }; UpdateActionAvailability();
         _savedDraft = DraftState(); var registration = WorkspaceDraftRegistry.Register(this, "音频 I/O", () => !_closed && (_busy || DraftState() != _savedDraft), ApplyAsync, Close); Closed += (_, _) => registration.Dispose();
-        void Section(string title) { var heading = Label(title); heading.FontSize = 15; heading.FontWeight = FontWeights.SemiBold; heading.Margin = new Thickness(0, 10, 0, 7); Body.Children.Add(heading); }
+        if (_mode == "hybrid") Loaded += async (_, _) => { await ChangeModeAsync(_mode); if (!_edited) _savedDraft = DraftState(); };
     }
 
-    private string DraftState() => JsonSerializer.Serialize(new { _project.InputPorts, _project.OutputPorts, TrackPorts = _project.Tracks.Select(t => new { t.Id, t.InputPortId, t.HardwareOutputPortId }), InputMaps = _local.InputPorts, OutputMaps = _local.OutputPorts, Api = _activeApi, Card = SelectedCard?.Id, Rate = _rate.SelectedItem, Buffer = _buffer.SelectedItem, Player = _player.IsChecked, Target = (_playerTarget.SelectedItem as PlayerChoice)?.Id }, ProjectStore.JsonOptions);
+    private string DraftState() => JsonSerializer.Serialize(new { _project.InputPorts, _project.OutputPorts, TrackPorts = _project.Tracks.Select(t => new { t.Id, t.InputPortId, t.HardwareOutputPortId }), InputMaps = _local.InputPorts, OutputMaps = _local.OutputPorts, _local.OutputMirrors, Mode = _mode, Devices = _selectedIds.Order(), Clock = (_clock.SelectedItem as RackUiDevice)?.Id, Api = _activeApi, Card = SelectedCard?.Id, Rate = _rate.SelectedItem, Buffer = _buffer.SelectedItem }, ProjectStore.JsonOptions);
     private async Task<bool> ApplyAsync()
     {
         if (_busy) return false; _busy = true; UpdateActionAvailability();
-        try { _guard.RequireCurrent(); ValidateDraft(); await _host.ApplyIoAsync(_project, _local); _savedDraft = DraftState(); _busy = false; DialogResult = true; return true; }
-        catch (Exception ex) { Invalid("音频 I/O 未保存：" + ex.Message); return false; }
+        try
+        {
+            await _previewWork; _guard.RequireCurrent(); var settings = PrepareSettings();
+            await _host.ApplyIoAsync(_project, settings);
+            _previewTouched = false; _savedDraft = DraftState(); _busy = false; _allowClose = true; DialogResult = true; return true;
+        }
+        catch (Exception ex)
+        {
+            var error = await RestorePreviewAsync(); Invalid("音频 I/O 未保存：" + ex.Message + error); return false;
+        }
         finally { _busy = false; UpdateActionAvailability(); }
     }
 
@@ -90,17 +96,17 @@ internal sealed partial class RackDeviceDialog : DeckDialog
     }
     private async Task ProbeAsync()
     {
-        if (_host.Status.IsRunning || _activeApi != "asio" || SelectedCard?.Devices.SingleOrDefault() is not { Available: true } device) return;
-        var cardId = SelectedCard.Id;
+        if (_host.Status.IsRunning || _activeApi != "asio" || DriverDevice is not { Available: true } device) return;
+        var cardId = SelectedCard?.Id ?? "";
         await HardwareActionAsync(async () =>
         {
-            InvalidateDriver(device, cardId); var result = await _host.ProbeDeviceAsync("asio", device.Id); _devices.RemoveAll(d => d.Id == result.Id); _devices.Add(result); SetCards(cardId); UpdateRates(true); Render();
+            InvalidateDriver(device, cardId); var result = await _host.ProbeDeviceAsync("asio", device.Id); _devices.RemoveAll(d => d.Id == result.Id); _devices.Add(result); SetCards(cardId); RefreshDeviceControls(); UpdateRates(true); Render();
         }, "正在隔离进程中探测所选驱动…");
     }
     private async Task OpenPanelAsync()
     {
-        if (_host.Status.IsRunning || _activeApi != "asio" || SelectedCard?.Devices.SingleOrDefault() is not { Available: true } device) return;
-        var cardId = SelectedCard.Id;
+        if (_host.Status.IsRunning || _activeApi != "asio" || DriverDevice is not { Available: true } device) return;
+        var cardId = SelectedCard?.Id ?? "";
         await HardwareActionAsync(async () =>
         {
             InvalidateDriver(device, cardId); await _host.ShowDriverControlPanelAsync(device.Id);
@@ -109,7 +115,7 @@ internal sealed partial class RackDeviceDialog : DeckDialog
     private void InvalidateDriver(RackUiDevice device, string cardId)
     {
         _devices.RemoveAll(d => d.Id == device.Id); _devices.Add(device with { ProbeRequired = true, InputChannels = 0, OutputChannels = 0, SampleRates = [], InputChannelNames = [], OutputChannelNames = [] });
-        SetCards(cardId); UpdateRates(); Render();
+        SetCards(cardId); RefreshDeviceControls(); UpdateRates(); Render();
     }
     private async Task HardwareActionAsync(Func<Task> action, string label)
     {
@@ -122,17 +128,28 @@ internal sealed partial class RackDeviceDialog : DeckDialog
     {
         if (_closed) return; var state = _host.Status; Body.IsEnabled = !_busy && _guard.IsCurrent;
         var driver = _activeApi == "asio"; _probe.Visibility = _panel.Visibility = driver ? Visibility.Visible : Visibility.Collapsed;
-        _probe.IsEnabled = _panel.IsEnabled = driver && !_busy && !state.IsRunning && !state.IsBusy && SelectedCard?.Devices.Count == 1 && SelectedCard.Devices[0].Available;
+        _probe.IsEnabled = _panel.IsEnabled = driver && !_busy && !state.IsRunning && !state.IsBusy && DriverDevice?.Available == true;
         if (_apply is not null) _apply.IsEnabled = !_busy && _guard.IsCurrent; if (_cancel is not null) _cancel.IsEnabled = !_busy;
         if (!_guard.IsCurrent) Invalid("当前机架已切换，请关闭此窗口并重新打开音频 I/O。");
         _actual.Text = _busy ? _operationLabel : state.DriverResetRequired ? "驱动请求重新初始化：请停止机架后重新开启。"
             : state.IsRunning ? $"当前实际 {state.Api.ToUpperInvariant()} · {state.ActualSampleRate} Hz / {state.ActualBufferFrames} 帧。运行中禁止探测或打开 ASIO 控制面板。"
-            : driver ? "ASIO 列表只读取注册项；点击探测才初始化所选驱动，不开始播放。驱动控制面板关闭后请重新探测。" : "同一张声卡可映射多个 Windows 端点；映射端点需使用同一采样率。";
+            : Multi ? "主时钟输出驱动机架处理；其他设备的实际延迟取决于驱动与缓冲设置。" : driver ? "ASIO 列表只读取注册项；点击探测才初始化所选驱动，不开始播放。驱动控制面板关闭后请重新探测。" : "同一张声卡可映射多个 Windows 端点；映射端点需使用同一采样率。";
+        if (Multi && state.IsRunning && state.Endpoints is { Count: > 0 } endpoints)
+        {
+            string EndpointText(RackUiEndpointStatus ep)
+            {
+                var d = _devices.FirstOrDefault(d => d.Id == ep.DeviceId);
+                var role = ep.Clock ? "主时钟" : ep.Input ? "输入" : "输出";
+                return $"{d?.Name ?? ep.DeviceId}（{role}）" + (ep.Muted ? " 已静音 " + ep.Error : $" {ep.SampleRate} Hz" + (ep.Clock ? "" : $" · {ep.DriftPpm:+0.0;-0.0;0} ppm"));
+            }
+            _actual.Text += "\n" + string.Join("　", endpoints.Select(EndpointText));
+        }
         UpdateImpact();
     }
     private void UpdateRates(bool newDevice = false)
     {
         var old = _rate.SelectedItem is int rate && !newDevice ? rate : _local.SampleRate;
+        if (Multi) { UpdateMultiRates(old, newDevice); return; }
         var inputIds = _project.InputPorts.Select(p => p.Id).ToHashSet(); var outputIds = _project.OutputPorts.Select(p => p.Id).ToHashSet();
         var mappedIds = _local.InputPorts.Where(p => inputIds.Contains(p.Key)).Concat(_local.OutputPorts.Where(p => outputIds.Contains(p.Key))).Select(p => p.Value.DeviceId).ToHashSet();
         var endpoints = (SelectedCard?.Devices ?? []).Where(d => d.Available && !d.ProbeRequired && mappedIds.Contains(d.Id)).ToArray();
@@ -159,12 +176,13 @@ internal sealed partial class RackDeviceDialog : DeckDialog
     }
     private static string Latency(int? value) => value is >= 0 ? value + " 帧" : "未知";
     internal static int[] AsioBufferChoices(RackUiDevice driver) => driver.BufferMinFrames <= 0 || driver.BufferMaxFrames < driver.BufferMinFrames || driver.BufferGranularity < -1 ? [] : Enumerable.Range(8, 8192 - 8 + 1).Where(frames => frames >= driver.BufferMinFrames && frames <= driver.BufferMaxFrames && (driver.BufferGranularity == -1 ? (frames & (frames - 1)) == 0 : driver.BufferGranularity > 0 ? (frames - driver.BufferMinFrames) % driver.BufferGranularity == 0 : driver.BufferMinFrames == driver.BufferMaxFrames && frames == driver.BufferMinFrames)).ToArray();
-    private void ChangeTab(bool input) { _input = input; _selection = null; Render(); }
+
     private void ClearError() { Error.Visibility = Visibility.Collapsed; UpdateImpact(); }
     private void UpdateImpact()
     {
-        _impact.Text = "应用结果：重新连接机架。\n新增 I/O 应用时创建同名输入 / 输出轨；新输入轨主输出为第一条输出轨。已有轨道和手动路由保留。"
-            + "\n新输入监听仍需手动开启。无输出时须先配置硬件输出。取消不创建轨道，保留当前设备和声音去向。";
+        _impact.Text = Multi && MatchesRunningStreams()
+            ? "勾选声道可即时试听。保存配置保留当前分配，关闭恢复上次保存的分配。"
+            : "选择设备并分配输入、输出声道后保存配置。新增输入轨的监听需手动开启。";
     }
     private void AddPort(int channels)
     {
@@ -177,11 +195,12 @@ internal sealed partial class RackDeviceDialog : DeckDialog
         var used = _project.Tracks.Where(t => (_input ? t.InputPortId : t.HardwareOutputPortId) == port.Id).ToArray();
         if (ThemedMessageBox.Show(this, $"移除“{port.Name}”？" + (used.Length == 0 ? "" : $"\n将清除 {used.Length} 条轨道对此通道的选择；轨道本身保留。"), "移除音频 I/O", MessageBoxButton.OKCancel, MessageBoxImage.Question) != MessageBoxResult.OK) return;
         foreach (var track in used) { if (_input) track.InputPortId = null; else track.HardwareOutputPortId = null; }
-        Ports.Remove(port); Maps.Remove(port.Id); _selection = null; ClearError(); UpdateRates(); Render();
+        Ports.Remove(port); Maps.Remove(port.Id); if (!_input) _local.OutputMirrors.Remove(port.Id); _selection = null; ClearError(); UpdateRates(); Render();
     }
     private void SelectCell(RackIoPort port, RackUiDevice device, int channel)
     {
         _selection = port.Id; ClearError();
+        if (Multi) { SelectMultiCell(port, device, channel); Render(); QueuePreview(); return; }
         var selected = Maps.TryGetValue(port.Id, out var old) && old.DeviceId == device.Id ? old.Channels.ToList() : [];
         if (selected.Contains(channel)) selected.Remove(channel);
         else if (port.Channels == 1) selected = [channel];
@@ -189,7 +208,16 @@ internal sealed partial class RackDeviceDialog : DeckDialog
         if (selected.Count == 0) Maps.Remove(port.Id); else Maps[port.Id] = new() { DeviceId = device.Id, DeviceName = device.Name, Channels = selected.ToArray() };
         UpdateRates(); Render();
     }
-    private void ValidateDraft()
+    private RackLocalSettings PrepareSettings()
+    {
+        var settings = RackWorkspaceControl.CopyLocal(_local);
+        settings.IoMode = _mode;
+        if (Multi) PrepareMultiSettings(settings); else PrepareSingleSettings(settings);
+        settings.RoutePlayer = false;
+        _project.PlaybackTrackId = null;
+        _project.Validate(); settings.Validate(); return settings;
+    }
+    private void PrepareSingleSettings(RackLocalSettings settings)
     {
         var card = SelectedCard ?? throw new ArgumentException("请选择声卡。");
         if (card.Devices.Count == 0 || card.Devices.Any(d => !d.Available)) throw new ArgumentException("所选声卡当前不可用。");
@@ -211,21 +239,13 @@ internal sealed partial class RackDeviceDialog : DeckDialog
         if (output is null) throw new ArgumentException("请在右侧输出矩阵至少添加并映射一个硬件输出。");
         var inputIds = _project.InputPorts.Select(p => p.Id).ToHashSet();
         var inputDevice = card.Devices.FirstOrDefault(d => _local.InputPorts.Any(p => inputIds.Contains(p.Key) && p.Value.DeviceId == d.Id));
-        _local.DeviceApi = output.Api; _local.OutputDeviceId = output.Id; _local.OutputDeviceName = output.Name;
-        _local.InputDeviceId = inputDevice?.Id ?? ""; _local.InputDeviceName = inputDevice?.Name ?? "";
+        settings.SelectedEndpointIds.Clear(); settings.OutputMirrors.Clear();
+        settings.DeviceApi = output.Api; settings.OutputDeviceId = output.Id; settings.OutputDeviceName = output.Name;
+        settings.InputDeviceId = inputDevice?.Id ?? ""; settings.InputDeviceName = inputDevice?.Name ?? "";
         if (_rate.SelectedItem is not int rate || _buffer.SelectedItem is not int buffer) throw new ArgumentException(_activeApi == "asio" ? "请选择驱动明确支持的采样率和请求缓冲帧数；约束未知时请重新探测。" : "所选端点需具有共同采样率，请先在 Windows 声音设置中设置相同格式。");
         if (_activeApi == "asio" && !AsioBufferChoices(output).Contains(buffer)) throw new ArgumentException("请求缓冲帧数不符合 ASIO 驱动约束。");
-        _local.SampleRate = rate; _local.BufferSize = buffer; _local.RoutePlayer = false;
-        _project.PlaybackTrackId = null;
-        if (_local.RoutePlayer && (_project.PlaybackTrackId is not { } targetId || _project.FindTrack(targetId) is not { Kind: RackTrackKind.Playback, Channels: 2 })) throw new ArgumentException("请选择接入机架的立体声播放轨道。");
-        _project.Validate(); _local.Validate();
+        settings.SampleRate = rate; settings.BufferSize = buffer;
     }
-    private string ChannelName(RackUiDevice device, int channel)
-    {
-        var names = _input ? device.InputChannelNames : device.OutputChannelNames;
-        return names is not null && channel < names.Count && !string.IsNullOrWhiteSpace(names[channel]) ? names[channel] : "通道 " + (channel + 1);
-    }
-    private sealed record PlayerChoice(Guid? Id, string Name);
     private sealed record ApiChoice(string Id, string Name);
     private sealed record Card(string Id, string Name, IReadOnlyList<RackUiDevice> Devices) { public override string ToString() => Name; }
 }
